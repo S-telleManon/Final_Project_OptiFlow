@@ -1,0 +1,152 @@
+{% extends 'shipments/base.html' %}
+
+{% block title %}{% if editing %}Edit User{% else %}Create User{% endif %}{% endblock %}
+{% block page_title %}{% if editing %}Edit User{% else %}Create User{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-8">
+
+    <div class="bg-white p-6 rounded-xl shadow-lg">
+        <h2 class="text-2xl font-bold mb-4">
+            {% if editing %}Edit User{% else %}Create New User{% endif %}
+        </h2>
+
+        <form method="POST" class="space-y-4">
+            {% csrf_token %}
+
+            <!-- Username -->
+            <div>
+                <label for="id_username" class="block text-sm font-medium mb-1">Username</label>
+                <input type="text" name="username" id="id_username"
+                       value="{{ form.username.value|default_if_none:'' }}"
+                       placeholder="Enter username" required
+                       class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-purple-400">
+            </div>
+
+            <!-- Password (only show on creation or if changing) -->
+            {% if not editing %}
+            <div>
+                <label for="id_password" class="block text-sm font-medium mb-1">Password</label>
+                <div class="relative">
+                    <input type="password" name="password" id="id_password"
+                        placeholder="Enter password" required
+                        class="w-full border rounded px-3 py-2 pr-10 focus:ring-2 focus:ring-purple-400">
+
+                    <button type="button"
+                            onclick="togglePassword('id_password', this)"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-lg">
+                        🙈
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <label for="id_password_confirm" class="block text-sm font-medium mb-1">Confirm Password</label>
+                <div class="relative">
+                    <input type="password" name="password_confirm" id="id_password_confirm"
+                        placeholder="Confirm password" required
+                        class="w-full border rounded px-3 py-2 pr-10 focus:ring-2 focus:ring-purple-400">
+
+                    <button type="button"
+                            onclick="togglePassword('id_password_confirm', this)"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-lg">
+                        🙈
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- First Name -->
+            <div>
+                <label for="id_first_name" class="block text-sm font-medium mb-1">First Name</label>
+                <input type="text" name="first_name" id="id_first_name"
+                       value="{{ form.first_name.value|default_if_none:'' }}"
+                       placeholder="First Name" required
+                       class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-purple-400">
+            </div>
+
+            <!-- Last Name -->
+            <div>
+                <label for="id_last_name" class="block text-sm font-medium mb-1">Last Name</label>
+                <input type="text" name="last_name" id="id_last_name"
+                       value="{{ form.last_name.value|default_if_none:'' }}"
+                       placeholder="Last Name" required
+                       class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-purple-400">
+            </div>
+
+            <!-- Email -->
+            <div>
+                <label for="id_email" class="block text-sm font-medium mb-1">Email</label>
+                <input type="email" name="email" id="id_email"
+                       value="{{ form.email.value|default_if_none:'' }}"
+                       placeholder="Email" required
+                       class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-purple-400">
+            </div>
+
+            <!-- Department -->
+            <div>
+                <label for="id_department" class="block text-sm font-medium mb-1">Department</label>
+                <select name="department" id="id_department" required
+                        class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-purple-400">
+                    <option value="">Select Department</option>
+                    {% for d in departments %}
+                        <option value="{{ d.id }}"
+                            {% if form.department.value|stringformat:"s" == d.id|stringformat:"s" %}selected{% endif %}>
+                            {{ d.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Role -->
+            <div class="mt-4">
+                <label for="id_group" class="block text-sm font-medium mb-1">Role</label>
+                <select name="group" id="id_group" required
+                        class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-purple-400">
+
+                    <option value="">Select Role</option>
+
+                    {% for group in groups %}
+                        <option value="{{ group.id }}"
+                            {% if editing and current_group and group.id == current_group.id %}selected{% endif %}>
+                            {{ group.name|title }}
+                        </option>
+                    {% endfor %}
+
+                </select>
+            </div>
+
+                <!-- Zone visible only if department is Operations -->
+                <div x-show="dept == '{{ operations_dept_id }}'" class="mt-2">
+                    <label for="id_zone" class="block text-sm font-medium mb-1">Zone (Optional)</label>
+                    <input type="text" name="zone" id="id_zone"
+                           value="{{ form.zone.value|default_if_none:'' }}"
+                           placeholder="Zone for Operations"
+                           class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-purple-400">
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit"
+                    class="w-full bg-purple-900 hover:bg-purple-600 text-white py-2 rounded-lg shadow
+                           transition hover:scale-105">
+                {% if editing %}Update User{% else %}Create User{% endif %}
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+function togglePassword(fieldId, btn) {
+    const input = document.getElementById(fieldId);
+
+    if (input.type === "password") {
+        input.type = "text";
+        btn.textContent = "👁️";  // show eye
+    } else {
+        input.type = "password";
+        btn.textContent = "🙈";  // hide again
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,322 @@
+{% extends 'shipments/base.html' %}
+
+{% block title %}Shipment List{% endblock %}
+{% block page_title %}Shipment List{% endblock %}
+
+{% block content %}
+<div class="p-6">
+
+<!-- BULK ACTION BAR -->
+<form method="POST" action="{% url 'bulk_action' %}" id="bulkForm">
+    {% csrf_token %}
+
+    <div class="mb-4 flex gap-3 items-center flex-wrap">
+
+        <select name="bulk_department"
+                class="border px-3 py-2 rounded">
+
+            <option value="">Bulk Change Department</option>
+
+            {% for dept in departments %}
+                <option value="{{ dept.id }}">
+                    {{ dept.name }}
+                </option>
+            {% endfor %}
+
+        </select>
+
+        <select name="bulk_status"
+                class="border px-3 py-2 rounded">
+
+            <option value="">Bulk Change Status</option>
+
+            {% for s in statuses %}
+                <option value="{{ s }}">
+                    {{ s }}
+                </option>
+            {% endfor %}
+
+        </select>
+
+        <select name="bulk_user"
+                class="border px-3 py-2 rounded">
+
+            <option value="">Bulk Agent Select</option>
+
+            {% for u in users %}
+                <option value="{{ u.id }}">
+                    {{ u.first_name }} {{ u.last_name }}
+                </option>
+            {% endfor %}
+
+        </select>
+
+
+        <button type="submit"
+                name="action"
+                value="reassign"
+                class="bg-orange-600 text-white px-4 py-2 rounded hover:bg-blue-900">
+
+            🔄 Apply Bulk Changes
+
+        </button>
+
+        {% if can_optimize %}
+        <button type="submit"
+                name="action"
+                value="optimize"
+                class="bg-purple-800 text-white px-4 py-2 rounded hover:bg-blue-900">
+
+            🚚 Optimize Routes
+
+        </button>
+
+        {% endif %}
+
+    </div>
+
+</form>
+
+
+
+<!-- TABLE -->
+<div class="bg-white shadow-lg rounded-xl overflow-hidden">
+
+    <div class="overflow-x-auto">
+
+        <table class="min-w-full divide-y divide-gray-200">
+
+
+            <thead class="bg-gray-100">
+
+                <tr>
+
+                    <th class="py-2 px-4 text-left">
+                        <input type="checkbox" id="selectAll">
+                    </th>
+
+                    <th class="py-2 px-4 text-left">
+                        Tracking No
+                    </th>
+
+                    <th class="py-2 px-4 text-left">
+                        MAWB
+                    </th>
+
+                    <th class="py-2 px-4 text-left">
+                        Shipper
+                    </th>
+
+                    <th class="py-2 px-4 text-left">
+                        Recipient
+                    </th>
+
+                    <th class="py-2 px-4 text-left">
+                        Department
+                    </th>
+
+                    <th class="py-2 px-4 text-left">
+                        Status
+                    </th>
+
+                    <th class="py-2 px-4 text-left">
+                        Agent Assigned
+                    </th>
+
+                    <th class="py-2 px-4 text-left">
+                        Actions
+                    </th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody class="bg-white divide-y divide-gray-200">
+
+                {% for shipment in shipments %}
+
+                <tr>
+
+                    <!-- BULK CHECKBOX -->
+                    <td class="py-2 px-4">
+
+                        <input type="checkbox"
+                               form="bulkForm"
+                               name="selected_shipments"
+                               value="{{ shipment.id }}"
+                               class="shipment-checkbox">
+
+                    </td>
+
+                    <td class="py-2 px-4">{{ shipment.tracking_number }}</td>
+                    <td class="py-2 px-4">{{ shipment.master_airwaybill }}</td>
+                    <td class="py-2 px-4"> {{ shipment.shipper_name }}</td>
+                    <td class="py-2 px-4">{{ shipment.recipient_name }}</td>
+
+                    <!-- INLINE  FORM -->
+                    <form method="POST"
+                          action="{% url 'shipment_list' %}">
+
+                        {% csrf_token %}
+
+                        <input type="hidden"
+                               name="shipment_id"
+                               value="{{ shipment.id }}">
+
+<!------------------------------- DEPARTMENT -------------------->
+                        <td class="py-2 px-4">
+
+                            <select name="department"
+                                    class="border rounded px-2 py-1 text-sm w-full">
+
+                                {% for dept in departments %}
+
+                                    <option value="{{ dept.id }}"
+                                        {% if shipment.department == dept %}selected{% endif %}>
+
+                                        {{ dept.name }}
+
+                                    </option>
+
+                                {% endfor %}
+
+                            </select>
+
+                        </td>
+<!-----------------------------------------------------STATUS --------------->
+                        <td class="py-2 px-4">
+
+                            <select name="status"
+                                    class="border rounded px-2 py-1 text-sm w-full">
+
+                                {% for s in statuses %}
+
+                                    <option value="{{ s }}"
+                                        {% if shipment.status == s %}selected{% endif %}>
+
+                                        {{ s }}
+
+                                    </option>
+
+                                {% endfor %}
+
+                            </select>
+
+                        </td>
+
+ <!-- AGENT------------------------- -->
+                        <td class="py-2 px-4">
+
+                            {% if is_manager or is_admin %}
+
+                                <select name="assigned_agent"
+                                        class="border rounded px-2 py-1 text-sm w-full">
+
+                                    <option value="">
+                                        -- Select Agent --
+                                    </option>
+
+                                    {% for u in users %}
+
+                                        <option value="{{ u.id }}"
+                                            {% if shipment.assigned_agent and shipment.assigned_agent.id == u.id %}
+                                                selected
+                                            {% endif %}>
+
+                                            {{ u.first_name }} {{ u.last_name }}
+
+                                        </option>
+
+                                    {% endfor %}
+
+                                </select>
+
+                            {% else %}
+
+                                {% if shipment.assigned_agent %}
+
+                                    {{ shipment.assigned_agent.first_name }}
+                                    {{ shipment.assigned_agent.last_name }}
+
+                                {% else %}
+
+                                    Not assigned
+
+                                {% endif %}
+
+                            {% endif %}
+
+                        </td>
+
+                        <!-- ACTIONS -->
+                        <td class="py-2 px-4">
+
+                            <div class="flex gap-2">
+
+                                <!-- SAVE -->
+                                <button type="submit"
+                                        class="bg-purple-800 text-white px-3 py-1 rounded hover:bg-purple-700 text-sm">
+
+                                    Save
+
+                                </button>
+
+                                <!-- VIEW -->
+                                <a href=""
+                                   class="bg-orange-600 text-white px-3 py-1 rounded hover:bg-orange-600 text-sm">
+
+                                    View Details
+
+                                </a>
+
+                            </div>
+
+                        </td>
+
+                    </form>
+
+                </tr>
+
+                {% empty %}
+
+                <tr>
+
+                    <td colspan="9"
+                        class="py-4 text-center text-gray-500">
+
+                        No shipments found.
+
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+</div>
+
+
+<!-- SELECT ALL SCRIPT -->
+<script>
+
+document.getElementById("selectAll").addEventListener("change", function () {
+
+    let checkboxes = document.querySelectorAll(".shipment-checkbox");
+
+    checkboxes.forEach(cb => {
+        cb.checked = this.checked;
+    });
+
+});
+
+</script>
+
+{% endblock %}

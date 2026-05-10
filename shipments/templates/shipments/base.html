@@ -1,0 +1,153 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Dashboard{% endblock %}</title>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- Chart.js (optional for pages that need it) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            background-color: #f8fafc;
+        }
+    </style>
+
+    {% block extra_head %}{% endblock %}
+</head>
+
+<body class="text-gray-800" x-data="{ open: true }">
+    {% if messages %}
+    <div class="max-w-2xl mx-auto mt-4">
+        {% for message in messages %}
+            <div class="mb-2 px-4 py-2 rounded 
+                {% if message.tags == 'success' %}bg-green-100 text-green-800
+                {% elif message.tags == 'error' %}
+                    bg-red-100 text-red-800
+                {% elif message.tags == 'warning' %}
+                    bg-yellow-100 text-yellow-800
+                {% else %}
+                    bg-gray-100 text-gray-800
+                {% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+<div class="flex h-screen">
+
+    <!-- SIDEBAR -->
+    <aside :class="open ? 'w-64' : 'w-20'" 
+       class="bg-gradient-to-r from-white-600 to-purple-600 p-2 transition-all duration-300 shadow">
+
+        <!-- TOGGLE -->
+        <button @click="open = !open" class="mb-6 text-xl">☰</button>
+
+        <!-- TITLE -->
+        <h2 x-show="open" x-transition 
+            class="text-3xl font-bold mb-8 text-gray-900 text-center">
+            OptiFlow 🌀
+        </h2>
+
+        <!-- MENU -->
+        <nav class="space-y-4">
+
+            <a href="{% url 'dashboard' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900 text-lg">
+                📊 <span x-show="open">Dashboard</span>
+            </a>
+
+            <a href="{% url 'upload' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900 text-lg">
+                📤 <span x-show="open">Upload Shipments</span>
+            </a>
+
+            <a href="{% url 'shipment_list' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900 text-lg">
+                📦 <span x-show="open">Shipments</span>
+            </a>
+
+            <a href="{% url 'routes_diplay' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900 text-lg">
+                🚚 <span x-show="open">Routes</span>
+            </a>
+            <a href="{% url 'driver_schedule' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900">
+                🕒 <span x-show="open">Driver Schedule</span>
+            </a>
+
+            <a href="{% url 'users_list' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900 text-lg">
+                🧑‍💼 <span x-show="open">Users</span>
+            </a>
+
+        </nav>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <div class="flex-1 flex flex-col">
+
+        <!-- TOPBAR -->
+        <header class="bg-white p-4 flex justify-between items-center shadow">
+
+            <!-- PAGE TITLE -->
+            <h1 class="text-xl font-semibold text-gray-900">
+                {% block page_title %}Dashboard{% endblock %}
+            </h1>
+
+            <!-- PROFILE -->
+            <div class="relative" x-data="{ open: false }">
+
+                <div @click="open = !open"
+                     class="w-10 h-10 rounded-full bg-purple-900 flex items-center justify-center cursor-pointer hover:scale-110 transition text-white">
+
+                    {% with request.user.first_name|default:"?" as first %}
+                    {% with request.user.last_name|default:"?" as last %}
+                        {{ first|slice:":1" }}{{ last|slice:":1" }}
+                    {% endwith %}
+                    {% endwith %}
+                </div>
+
+                <!-- DROPDOWN -->
+                <div x-show="open"
+                     @click.outside="open = false"
+                     class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200">
+
+                    <div class="p-3 border-b border-gray-200">
+                        <p class="font-semibold text-gray-900">
+                            {{ request.user.username }}
+                        </p>
+                        <p class="text-sm text-gray-500">
+                            {{ request.user.email }}
+                        </p>
+                    </div>
+
+                    <form method="POST" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button class="block w-full text-left px-4 py-2 hover:bg-red-100 text-red-600">
+                            🚪 Logout
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+
+        </header>
+               <!-- CONTENT -->
+
+        <main class="p-4 space-y-4 overflow-y-auto pt-8"> <!-- padding-top = header height -->
+            {% block content %}{% endblock %}
+        </main>
+
+
+
+    </div>
+
+</div>
+
+{% block extra_scripts %}{% endblock %}
+
+</body>
+</html>

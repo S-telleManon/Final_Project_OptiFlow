@@ -1,0 +1,84 @@
+{% extends 'shipments/base.html' %}
+
+{% block title %}Routes{% endblock %}
+{% block page_title %}Optimized Routes 🚚{% endblock %}
+
+{% block content %}
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<div class="flex gap-4">
+
+    <!-- MAP -->
+    <div id="map" class="w-2/3 h-[700px] rounded-xl shadow"></div>
+
+    <!-- DRIVER PANEL -->
+    <div class="w-1/3 bg-white p-4 rounded-xl shadow overflow-y-auto">
+
+        <h2 class="text-lg font-bold mb-4">Drivers Overview</h2>
+
+        <div id="driverList"></div>
+
+    </div>
+
+</div>
+
+<!-- SAFE JSON FROM DJANGO -->
+{{ routes_data_json|json_script:"routes-data" }}
+
+<script>
+
+    const routes = JSON.parse(
+        document.getElementById("routes-data").textContent
+    );
+
+    console.log("ROUTES:", routes);
+
+
+    var map = L.map('map').setView([-20.1609, 57.5012], 11);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    let html = "";
+
+    routes.forEach(driver => {
+
+        // driver panel
+        html += `
+            <div class="mb-3 p-3 border rounded">
+                <div style="color:${driver.color}">
+                    🚗 ${driver.driver_name}
+                </div>
+                <div>${driver.count} deliveries</div>
+            </div>
+        `;
+
+        let latlngs = [];
+
+        driver.route.forEach(stop => {
+
+            const point = [stop.lat, stop.lng];
+            latlngs.push(point);
+
+            L.marker(point)
+                .addTo(map)
+                .bindPopup(stop.label);
+        });
+
+        if (latlngs.length > 0) {
+            L.polyline(latlngs, {
+                color: driver.color,
+                weight: 4
+            }).addTo(map);
+        }
+
+    });
+
+    document.getElementById("driverList").innerHTML = html;
+
+</script>
+
+{% endblock %}

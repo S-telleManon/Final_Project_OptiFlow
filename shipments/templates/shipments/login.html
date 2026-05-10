@@ -1,0 +1,67 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <link rel="stylesheet" href="{% static 'shipments/css/login.css' %}">
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script> <!-- for eye icon -->
+</head>
+<body>
+
+<!-- Video Background -->
+<video autoplay muted loop id="bg-video">
+    <source src="{% static 'shipments/videos/background.mp4' %}" type="video/mp4">
+    Your browser does not support HTML5 video.
+</video>
+<div id="video-overlay"></div>
+
+<!-- Messages -->
+<div class="messages">
+    {% for message in messages %}
+        <p class="{% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</p>
+    {% endfor %}
+</div>
+
+<!-- Login Form Container -->
+<div class="container">
+    <div class="form-container sign-in-container">
+        <form method="POST">
+            {% csrf_token %}
+            <h1>Welcome Back</h1>
+            <h2>Sign in to see your Dashboard</h2>
+
+            <input type="text" name="username" placeholder="Username" required>
+
+            <div class="password-wrapper">
+                <input type="password" name="password" id="password" placeholder="Password" required>
+                <span class="toggle-password" onclick="togglePassword()">
+                    <i id="eye-icon" class="fas fa-eye"></i>
+                </span>
+            </div>
+
+            <a href="" class="forgot-password">Forgot password?</a>
+
+            <button type="submit">Sign In</button>
+        </form>
+    </div>
+</div>
+
+<script>
+function togglePassword() {
+    const password = document.getElementById('password');
+    const eyeIcon = document.getElementById('eye-icon');
+    if(password.type === 'password') {
+        password.type = 'text';
+        eyeIcon.classList.remove('fa-eye');
+        eyeIcon.classList.add('fa-eye-slash');
+    } else {
+        password.type = 'password';
+        eyeIcon.classList.remove('fa-eye-slash');
+        eyeIcon.classList.add('fa-eye');
+    }
+}
+</script>
+
+</body>
+</html>

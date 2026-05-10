@@ -1,0 +1,139 @@
+{% extends 'shipments/base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+{% load custom_filters %}
+<!-- HERO -->
+<div class="bg-gradient-to-r from-purple-600 to-orange-600 p-6 rounded-xl shadow-lg text-white text-center">
+    <h2 class="text-2xl font-bold">
+        Welcome back to your Shipment Dashboard 👋
+    </h2>
+
+    <!-- DATE & TIME -->
+    <p id="currentDateTime" class="mt-2 text-sm text-gray-200"></p>
+</div>
+
+<!-- ACTION BAR -->
+<div class="flex justify-between items-center">
+    <h2 class="text-xl font-semibold">Overview</h2>
+</div>
+
+<!-- SUMMARY CARDS
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <div class="bg-white p-4 rounded-xl shadow hover:scale-105 transition text-center">
+        <h2 class="text-black">Total Shipments</h2>
+        <p class="text-2xl font-bold">{{ total }}</p>
+    </div>
+
+    {% for label in status_labels %}
+        <div class="bg-white p-3 rounded-xl shadow hover:scale-105 transition text-center">
+            <h2 class="text-black">{{ label }}</h2>
+            <p class="text-2xl font-bold 
+                {% if label|lower == 'cleared' %}text-red-600{% else %}text-green-600{% endif %}">
+                {{ status_data|index:forloop.counter0|default:"0" }}
+            </p>
+        </div>
+    {% endfor %}
+</div> -->
+
+<!-- PIE CHARTS FOR MANAGERS AND ADMINS -->
+{% if is_manager or is_admin %}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    <!-- Shipment Status -->
+    <div class="bg-white p-4 rounded-s shadow-lg w-full flex justify-center items-center">
+        <div class="text-center">
+            <h3 class="text-lg font-semibold mb-4">Shipment Status Distribution</h3>
+            <canvas id="statusChart" width="200" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Shipments by Department -->
+    <div class="bg-white p-4 rounded-s shadow-lg w-full flex justify-center items-center">
+        <div class="text-center">
+            <h3 class="text-lg font-semibold mb-4">Shipments by Department</h3>
+            <canvas id="deptChart" width="200" height="200"></canvas>
+        </div>
+    </div>
+
+</div>
+{% else %}
+<!-- For regular users, only show their own shipment status -->
+<div class="bg-white p-4 rounded-s shadow-lg w-1/2 mx-auto mt-6 flex justify-center items-center">
+    <div class="text-center">
+        <h3 class="text-lg font-semibold mb-4">Your Shipment Status</h3>
+        <canvas id="statusChart" width="200" height="200"></canvas>
+    </div>
+</div>
+{% endif %}
+
+<!-- SUMMARY CARDS -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <div class="bg-white p-4 rounded-xl shadow hover:scale-105 transition text-center">
+        <h2 class="text-black">Total Shipments</h2>
+        <p class="text-2xl font-bold">{{ total }}</p>
+    </div>
+
+    {% for label in status_labels %}
+        <div class="bg-white p-3 rounded-xl shadow hover:scale-105 transition text-center">
+            <h2 class="text-black">{{ label }}</h2>
+            <p class="text-2xl font-bold 
+                {% if label|lower == 'cleared' %}text-red-600{% else %}text-green-600{% endif %}">
+                {{ status_data|index:forloop.counter0|default:"0" }}
+            </p>
+        </div>
+    {% endfor %}
+</div>
+
+<!-- CHART JS -->
+<script>
+    const statusCtx = document.getElementById('statusChart');
+    new Chart(statusCtx, {
+        type: 'pie',
+        data: {
+            labels: {{ status_labels|safe }},
+            datasets: [{
+                data: {{ status_data|safe }},
+                backgroundColor: ['#ffd966','#ef4444','#facc15','#3b82f6','#a855f7']
+            }]
+        },
+        options: { responsive: false }
+    });
+
+    {% if is_manager or is_admin %}
+    const deptCtx = document.getElementById('deptChart');
+    new Chart(deptCtx, {
+        type: 'pie',
+        data: {
+            labels: {{ dept_labels|safe }},
+            datasets: [{
+                data: {{ dept_data|safe }},
+                backgroundColor: ['#4D148C','#FF6200','#facc15','#ef4444','#a855f7']
+            }]
+        },
+        options: { responsive: false }
+    });
+    {% endif %}
+</script>
+<script>
+    function updateDateTime() {
+        const now = new Date();
+        const options = {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        };
+        document.getElementById('currentDateTime').textContent =
+            now.toLocaleDateString('en-US', options);
+    }
+
+    updateDateTime();
+    setInterval(updateDateTime, 60000);
+</script>
+
+{% endblock %}

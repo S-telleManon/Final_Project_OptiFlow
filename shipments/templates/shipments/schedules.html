@@ -1,0 +1,99 @@
+{% extends "shipments/base.html" %}
+{% load static %}
+
+{% block title %}Driver Schedules{% endblock %}
+
+{% block page_title %}🚚 Driver Schedules{% endblock %}
+
+{% block content %}
+
+<div class="bg-white shadow rounded-lg p-4 overflow-x-auto">
+
+    <h2 class="text-lg font-semibold mb-4">
+        Manage Driver Availability & Capacity
+    </h2>
+
+    <table class="min-w-full text-sm border">
+
+        <thead class="bg-gray-100">
+            <tr>
+                <th class="p-3 text-left">Driver</th>
+                <th class="p-3 text-left">Start Time</th>
+                <th class="p-3 text-left">End Time</th>
+                <th class="p-3 text-left">Max Stops</th>
+                <th class="p-3 text-left">Available</th>
+                <th class="p-3 text-left">Action</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            {% for s in schedules %}
+            <tr class="border-b">
+
+                <form method="POST">
+                    {% csrf_token %}
+
+                    <input type="hidden" name="id" value="{{ s.id }}">
+
+                    <!-- DRIVER -->
+                    <td class="p-3 font-medium">
+                        {{ s.driver.first_name }} {{ s.driver.last_name }}
+                    </td>
+
+                    <!-- START TIME -->
+                    <td class="p-3">
+                        <input type="time"
+                               name="start_time"
+                               value="{{ s.start_time|time:'H:i' }}"
+                               class="border rounded px-2 py-1">
+                    </td>
+
+                    <!-- END TIME -->
+                    <td class="p-3">
+                        <input type="time"
+                               name="end_time"
+                               value="{{ s.end_time|time:'H:i' }}"
+                               class="border rounded px-2 py-1">
+                    </td>
+
+                    <!-- MAX STOPS -->
+                    <td class="p-3">
+                        <input type="number"
+                               name="max_stops"
+                               value="{{ s.max_stops }}"
+                               class="border rounded px-2 py-1 w-20">
+                    </td>
+
+                    <!-- AVAILABLE -->
+                    <td class="p-3">
+                        <input type="checkbox"
+                               name="is_available"
+                               {% if s.is_available %}checked{% endif %}>
+                    </td>
+
+                    <!-- SAVE -->
+                    <td class="p-3">
+                        <button type="submit"
+                                class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">
+                            Save
+                        </button>
+                    </td>
+
+                </form>
+
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="p-4 text-center text-gray-500">
+                    No driver schedules found.
+                </td>
+            </tr>
+            {% endfor %}
+
+        </tbody>
+    </table>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends 'shipments/base.html' %}
+
+{% block title %}Users{% endblock %}
+{% block page_title %}Users Management{% endblock %}
+
+{% block content %}
+<div class="max-w-9xl mx-auto space-y-9">
+
+    <!-- USERS TABLE -->
+    <div class="bg-white p-6 rounded-xl shadow-lg">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-2xl font-bold">All Users</h2>
+            <!-- CREATE USER BUTTON -->
+            <a href="{% url 'create_user' %}"
+            class="bg-purple-900 hover:bg-orange-500 text-white px-4 py-2 rounded shadow">
+                ➕ Create User
+            </a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white shadow rounded-lg">
+                <thead class="bg-gray-200">
+                    <tr>
+                        <th class="py-2 px-4 text-center">Username</th>
+                        <th class="py-2 px-4 text-center">Email</th>
+                        <th class="py-2 px-4 text-center">First Name</th>
+                        <th class="py-2 px-4 text-center">Last Name</th>
+                        <th class="py-2 px-4 text-center">Department</th>
+                        <th class="py-2 px-4 text-center">Role</th>
+                        <th class="py-2 px-4 text-center">Zone</th>
+                        <th class="py-2 px-4 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr class="border-b">
+                        <td class="py-2 px-4 text-center">{{ user.username }}</td>
+                        <td class="py-2 px-4 text-center">{{ user.email }}</td>
+                        <td class="py-2 px-4 text-center">{{ user.first_name }}</td>
+                        <td class="py-2 px-4 text-center">{{ user.last_name}}</td>
+                        <td class="py-2 px-4 text-center">{% if user.department %}{{ user.department.name }}{% endif %}</td>
+                        <td class="py-4 px-6">
+                            {% if user.groups.all|length > 0 %}
+                                {% for group in user.groups.all %}
+                                    {{ group.name|title }}{% if not forloop.last %}, {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                User
+                            {% endif %}
+                        </td>
+                        <td class="py-2 px-4 text-center">{{ user.zone }}</td>
+                        <td class="py-2 px-4 text-center">
+                            <div class="flex justify-center gap-2">
+                                <a href="{% url 'edit_user' user.id %}" 
+                                class="px-3 py-1 bg-purple-800 text-white rounded hover:bg-purple-600">
+                                Edit
+                                </a>
+                                <a href="{% url 'delete_user' user.id %}" 
+                                class="px-3 py-1 bg-red-700 text-white rounded hover:bg-red-600">
+                                Delete
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td class="py-2 px-4 text-center text-center" colspan="5">No users found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
