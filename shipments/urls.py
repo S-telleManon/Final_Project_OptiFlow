@@ -20,5 +20,6 @@ urlpatterns = [
     path('schedules/', views.driver_schedule_view, name='driver_schedule'),
     path('routes/',run_optimizer, name='routes'),
     path('routes/display', views.routes_page, name='routes_diplay'),
-    path('bulk-action/', views.bulk_action, name='bulk_action')
+    path('bulk-action/', views.bulk_action, name='bulk_action'),
+    path("shipments/<int:pk>/", views.shipment_details, name="shipment_details"),
 ]

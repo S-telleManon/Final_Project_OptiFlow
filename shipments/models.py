@@ -95,3 +95,42 @@ class Driver_info(models.Model):
     is_available = models.BooleanField(default=True)
 
     max_stops = models.IntegerField(default=25)
+
+
+class ShipmentHistory(models.Model):
+
+    shipment = models.ForeignKey(
+        "Shipment",
+        on_delete=models.CASCADE,
+        related_name="history"
+    )
+
+    status = models.CharField(max_length=50)
+    department = models.ForeignKey(
+        "Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    assigned_agent = models.ForeignKey(
+        "AppUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    changed_by = models.ForeignKey(
+        "AppUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shipment_changes"
+    )
+
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    note = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.shipment.tracking_number} - {self.status}"

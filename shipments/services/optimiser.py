@@ -1,269 +1,558 @@
-import openrouteservice
-from django.conf import settings
-from ortools.constraint_solver import pywrapcp, routing_enums_pb2
+import googlemaps
+import numpy as np
+import json
+from django.contrib.auth.decorators import permission_required,login_required
 from django.shortcuts import render, redirect , get_object_or_404
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.decorators import permission_required,login_required
-from ..models import Shipment,AppUser, Department, Driver_info
-from datetime import datetime,date,time
-from ..forms import AppUserForm
-from django.contrib.auth.models import Group
-from shipments.forms import ShipmentForm
-from django.db.models import Count
-import json
-from django.core.serializers.json import DjangoJSONEncoder
+from ..models import Shipment, Driver_info
+import googlemaps
+import numpy as np
+from ortools.constraint_solver import pywrapcp, routing_enums_pb2
+from django.conf import settings
+from datetime import datetime,date,timedelta
+
+WAREHOUSE_OPS = (settings.WAREHOUSE_LAT, settings.WAREHOUSE_LON)
 
 
-delivery_duration = 7 
+# ----------------------------
+# GOOGLE MATRIX (TIME)
+# ----------------------------
+def build_time_matrix(gmaps, coords):
+    size = len(coords)
+    matrix = [[0] * size for _ in range(size)]
+    CHUNK = 10
 
-WAREHOUSE_OPS = (settings.WAREHOUSE_LON, settings.WAREHOUSE_LAT)
+    for i in range(0, size, CHUNK):
+        for j in range(0, size, CHUNK):
+
+            result = gmaps.distance_matrix(
+                origins=coords[i:i + CHUNK],
+                destinations=coords[j:j + CHUNK],
+                mode="driving"
+            )
+
+            for r_idx, row in enumerate(result["rows"]):
+                for c_idx, element in enumerate(row["elements"]):
+
+                    if element["status"] == "OK":
+                        matrix[i + r_idx][j + c_idx] = element["duration"]["value"]
+                    else:
+                        matrix[i + r_idx][j + c_idx] = 999999
+
+    return matrix
 
 
-# def optimize(shipments, drivers):
+# # ----------------------------
+# # MAIN VRP OPTIMIZER
+# # ----------------------------
 
-#     client = openrouteservice.Client(key="eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjlhYmQ4NDVmYjA5MzQ3YTI4ZDMzOGFiOGQyYjM3YzU5IiwiaCI6Im11cm11cjY0In0=")
+# def depot_distance(coord):
+#     depot_lat, depot_lon = WAREHOUSE_OPS
+#     lat, lon = coord
+#     return (lat - depot_lat) ** 2 + (lon - depot_lon) ** 2
 
-#     coords = [WAREHOUSE_OPS ]
-#     shipment_list = []
-
-#     for s in shipments:
-#         coords.append((s.longitude, s.latitude))
-#         shipment_list.append(s)
-
-#     matrix = client.distance_matrix(
-#         locations=coords,
-#         profile="driving-car",
-#         metrics=["duration"]
-#     )["durations"]
-
-#     manager = pywrapcp.RoutingIndexManager(len(matrix), len(drivers), 0)
-#     routing = pywrapcp.RoutingModel(manager)
-
-#     def cost(i, j):
-#         a = manager.IndexToNode(i)
-#         b = manager.IndexToNode(j)
-
-#         time = matrix[a][b]
-
-#         if a != 0:
-#             time += delivery_duration * 60
-
-#         return int(time)
-
-#     cb = routing.RegisterTransitCallback(cost)
-#     routing.SetArcCostEvaluatorOfAllVehicles(cb)
-
-#     routing.AddDimension(
-#         cb,
-#         30 * 60,
-#         8 * 60 * 60,
-#         True,
-#         "time"
+# def euclidean_distance(a, b):
+#     return (
+#         (a[0] - b[0]) ** 2 +
+#         (a[1] - b[1]) ** 2
 #     )
 
+
+# def reorder_route_nearest_neighbor(depot, shipments):
+
+#     remaining = shipments[:]
+#     ordered = []
+
+#     current = depot
+
+#     while remaining:
+
+#         next_stop = min(
+#             remaining,
+#             key=lambda s: euclidean_distance(
+#                 current,
+#                 (s.latitude, s.longitude)
+#             )
+#         )
+
+#         ordered.append(next_stop)
+
+#         current = (
+#             next_stop.latitude,
+#             next_stop.longitude
+#         )
+
+#         remaining.remove(next_stop)
+
+#     return ordered
+
+# def optimize(shipments, drivers, driver_time_limits, driver_capacity):
+
+#     gmaps = googlemaps.Client(key=settings.GOOGLE_MAPS_KEY)
+
+#     shipment_list = [
+#         s for s in shipments if s.latitude and s.longitude
+#     ]
+
+#     if not shipment_list or not drivers:
+#         return {}
+#     shipment_list.sort(key=lambda s: depot_distance((s.latitude, s.longitude)))
+
+#     # ----------------------------
+#     # NODES (DEPOT + STOPS)
+#     # ----------------------------
+#     coords = [WAREHOUSE_OPS] + [
+#         (s.latitude, s.longitude) for s in shipment_list
+#     ]
+
+#     n = len(coords)
+#     num_vehicles = len(drivers)
+#     depot = 0
+
+#     # ----------------------------
+#     # MATRIX
+#     # ----------------------------
+#     time_matrix = build_time_matrix(gmaps, coords)
+
+#     # ----------------------------
+#     # OR-TOOLS MODEL
+#     # ----------------------------
+#     manager = pywrapcp.RoutingIndexManager(
+#         n,
+#         num_vehicles,
+#         depot
+#     )
+
+#     routing = pywrapcp.RoutingModel(manager)
+
+#     # ----------------------------
+#     # COST FUNCTION
+#     # ----------------------------
+#     def time_callback(from_index, to_index):
+#         from_node = manager.IndexToNode(from_index)
+#         to_node = manager.IndexToNode(to_index)
+#         return time_matrix[from_node][to_node]
+
+#     transit_callback_index = routing.RegisterTransitCallback(time_callback)
+#     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+
+#     # ----------------------------
+#     # CAPACITY (MAX STOPS)
+#     # ----------------------------
+#     def demand_callback(from_index):
+#         node = manager.IndexToNode(from_index)
+#         return 0 if node == 0 else 1
+
+#     demand_index = routing.RegisterUnaryTransitCallback(demand_callback)
+
+#     routing.AddDimensionWithVehicleCapacity(
+#         demand_index,
+#         0,
+#         driver_capacity,
+#         True,
+#         "Capacity"
+#     )
+
+#     # ----------------------------
+#     # TIME WINDOWS (SHIFT LIMITS)
+#     # ----------------------------
+#     def time_callback_dim(from_index, to_index):
+#         from_node = manager.IndexToNode(from_index)
+#         to_node = manager.IndexToNode(to_index)
+#         return time_matrix[from_node][to_node]
+
+#     time_index = routing.RegisterTransitCallback(time_callback_dim)
+
+#     routing.AddDimension(
+#         time_index,
+#         30 * 60,  # waiting slack (30 min)
+#         max(driver_time_limits),
+#         False,
+#         "Time"
+#     )
+
+#     time_dimension = routing.GetDimensionOrDie("Time")
+
+#     # depot time window
+#     for v in range(num_vehicles):
+#         start = routing.Start(v)
+#         time_dimension.CumulVar(start).SetRange(0, max(driver_time_limits))
+
+#     # ----------------------------
+#     # SEARCH PARAMETERS
+#     # ----------------------------
 #     params = pywrapcp.DefaultRoutingSearchParameters()
-#     params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+#     params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION
+#     params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+#     params.time_limit.FromSeconds(30)
 
 #     solution = routing.SolveWithParameters(params)
 
+#     if not solution:
+#         return {}
+
+#     # ----------------------------
+#     # BUILD RESULT
+#     # ----------------------------
 #     routes = {}
 
-#     for v in range(len(drivers)):
+#     for v in range(num_vehicles):
+
 #         index = routing.Start(v)
-#         route = []
+#         route_shipments = []
 
 #         while not routing.IsEnd(index):
+
 #             node = manager.IndexToNode(index)
 
 #             if node != 0:
-#                 route.append(shipment_list[node - 1])
+#                 route_shipments.append(shipment_list[node - 1])
 
 #             index = solution.Value(routing.NextVar(index))
+#         route_shipments = reorder_route_nearest_neighbor(
+#             WAREHOUSE_OPS,
+#             route_shipments
+#         )
+#         # build polyline
+#         route_coords = [WAREHOUSE_OPS]
+#         for s in route_shipments:
+#             route_coords.append((s.latitude, s.longitude))
+#         route_coords.append(WAREHOUSE_OPS)
 
-#         routes[v] = route
+#         poly = None
+#         if len(route_coords) > 2:
+#             poly = gmaps.directions(
+#                 origin=route_coords[0],
+#                 destination=route_coords[-1],
+#                 waypoints=route_coords[1:-1],
+#                 mode="driving"
+#             )[0]["overview_polyline"]["points"]
+
+#         routes[v] = {
+#             "shipments": route_shipments,
+#             "polyline": poly
+#         }
 
 #     return routes
+from sklearn.cluster import KMeans
+import numpy as np
 
-def optimize(shipments, drivers):
+def cluster_shipments(shipments, num_drivers):
+    coords = np.array([
+        [s.latitude, s.longitude] for s in shipments
+    ])
 
-    client = openrouteservice.Client(key="eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjlhYmQ4NDVmYjA5MzQ3YTI4ZDMzOGFiOGQyYjM3YzU5IiwiaCI6Im11cm11cjY0In0=")
+    kmeans = KMeans(n_clusters=num_drivers, random_state=42, n_init=10)
+    labels = kmeans.fit_predict(coords)
 
-    coords = [WAREHOUSE_OPS]  # (lon, lat)
-    shipment_list = []
+    clusters = {i: [] for i in range(num_drivers)}
 
+    for shipment, label in zip(shipments, labels):
+        clusters[label].append(shipment)
 
-    for s in shipments:
-        if s.latitude and s.longitude:
-            coords.append((s.longitude, s.latitude))
-            shipment_list.append(s)
+    return clusters
 
+def optimize(shipments, drivers, driver_time_limits, driver_capacity):
 
-    matrix = client.distance_matrix(
-        locations=coords,
-        profile="driving-car",
-        metrics=["duration"]
-    )["durations"]
+    gmaps = googlemaps.Client(key=settings.GOOGLE_MAPS_KEY)
 
- 
-    manager = pywrapcp.RoutingIndexManager(len(matrix), len(drivers), 0)
-    routing = pywrapcp.RoutingModel(manager)
+    shipment_list = [
+        s for s in shipments if s.latitude and s.longitude
+    ]
 
-    delivery_duration = 7  # minutes per stop
-
-    def cost(i, j):
-        a = manager.IndexToNode(i)
-        b = manager.IndexToNode(j)
-
-        time = matrix[a][b]
-
-        if time is None:
-            time = 999999  # fallback penalty
-
-        if a != 0:
-            time += delivery_duration * 60
-
-        return int(time)
-
-    callback = routing.RegisterTransitCallback(cost)
-    routing.SetArcCostEvaluatorOfAllVehicles(callback)
-
-    routing.AddDimension(
-        callback,
-        30 * 60,      # waiting time
-        8 * 60 * 60,  # max shift
-        True,
-        "time"
-    )
-
-
-    params = pywrapcp.DefaultRoutingSearchParameters()
-    params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
-
-    solution = routing.SolveWithParameters(params)
-
-    if not solution:
+    if not shipment_list or not drivers:
         return {}
 
+    clusters = cluster_shipments(shipment_list, len(drivers))
 
     routes = {}
 
-    for v in range(len(drivers)):
-        index = routing.Start(v)
-        route = []
+    for v, driver in enumerate(drivers):
+
+        cluster_shipments_list = clusters[v]
+
+        if not cluster_shipments_list:
+            continue
+
+        coords = [WAREHOUSE_OPS] + [
+            (s.latitude, s.longitude) for s in cluster_shipments_list
+        ]
+
+        time_matrix = build_time_matrix(gmaps, coords)
+
+        manager = pywrapcp.RoutingIndexManager(len(coords), 1, 0)
+        routing = pywrapcp.RoutingModel(manager)
+
+        def time_cb(from_index, to_index):
+            return time_matrix[
+                manager.IndexToNode(from_index)
+            ][manager.IndexToNode(to_index)]
+
+        transit_index = routing.RegisterTransitCallback(time_cb)
+        routing.SetArcCostEvaluatorOfAllVehicles(transit_index)
+
+        routing.AddDimension(
+            transit_index,
+            30 * 60,
+            driver_time_limits[v],
+            False,
+            "Time"
+        )
+
+        # capacity
+        def demand_cb(from_index):
+            return 0 if manager.IndexToNode(from_index) == 0 else 1
+
+        demand_index = routing.RegisterUnaryTransitCallback(demand_cb)
+
+        routing.AddDimensionWithVehicleCapacity(
+            demand_index,
+            0,
+            [driver_capacity[v]],
+            True,
+            "Capacity"
+        )
+
+        params = pywrapcp.DefaultRoutingSearchParameters()
+        params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+        params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+        params.time_limit.FromSeconds(10)
+
+        solution = routing.SolveWithParameters(params)
+
+        if not solution:
+            continue
+
+        # build route in solver order ONLY
+        index = routing.Start(0)
+        route_shipments = []
 
         while not routing.IsEnd(index):
             node = manager.IndexToNode(index)
-
-            if node != 0 and node - 1 < len(shipment_list):
-                route.append(shipment_list[node - 1])
-
+            if node != 0:
+                route_shipments.append(cluster_shipments_list[node - 1])
             index = solution.Value(routing.NextVar(index))
 
-        routes[v] = route
+        # IMPORTANT: NO nearest neighbor reorder
+
+        route_coords = [WAREHOUSE_OPS] + [
+            (s.latitude, s.longitude) for s in route_shipments
+        ] + [WAREHOUSE_OPS]
+
+        poly = gmaps.directions(
+            origin=route_coords[0],
+            destination=route_coords[-1],
+            waypoints=route_coords[1:-1],
+            mode="driving"
+        )[0]["overview_polyline"]["points"]
+
+        routes[v] = {
+            "shipments": route_shipments,
+            "polyline": poly
+        }
 
     return routes
 
-# def run_optimizer(request):
-#     shipments = Shipment.objects.all()
-#     drivers = AppUser.objects.filter(groups__name="Driver")
 
-#     routes = optimize(shipments, drivers)
-
-#     return render(request, "shipments/routes.html", {"routes": routes})
 
 
 def run_optimizer(request):
 
     shipments = Shipment.objects.filter(
-        status__in=["Ready For Delivery", "Assigned to Driver"]
+        status__in=[
+            "Ready For Delivery",
+            "Assigned to Driver"
+        ]
     )
-
-    drivers = list(AppUser.objects.filter(
-        groups__name="Driver",
-        is_active=True
-    ))
 
     if not shipments.exists():
         messages.warning(request, "No shipments available for processing.")
         return redirect("shipment_list")
 
-    if not drivers:
-        messages.warning(request, "No drivers available.")
+#DRIVER SCHEDULES NOW INCLUDES THE STATUS OF ACTIVE USER ONLY 
+    driver_infos = Driver_info.objects.filter(
+        date=date.today(),
+        is_available=True,
+        driver__is_active=True,
+        driver__groups__name="Driver"
+    ).select_related("driver")
+
+    if not driver_infos.exists():
+        messages.warning(request, "No drivers available today.")
         return redirect("shipment_list")
 
-    routes = optimize(shipments, drivers)
+    drivers = [info.driver for info in driver_infos]
 
-    # ============================
-    # ASSIGN DRIVERS + STATUS
-    # ============================
+#CLACULATING THE DRIVER LIMITS
+    today = date.today()
+
+    # driver_limits = []
+
+    # for info in driver_infos:
+
+    #     start_dt = datetime.combine(today, info.start_time)
+    #     end_dt = datetime.combine(today, info.end_time)
+
+    #     if end_dt < start_dt:
+    #         end_dt += timedelta(days=1)
+
+    #     shift_seconds = int((end_dt - start_dt).total_seconds())
+    #     driver_limits.append(
+    #     int((end_dt - start_dt).total_seconds())
+    # )
+    driver_time_limits = []
+    driver_capacity = []
+
+    for info in driver_infos:
+
+        # SHIFT TIME (seconds)
+        start_dt = datetime.combine(today, info.start_time)
+        end_dt = datetime.combine(today, info.end_time)
+
+        if end_dt < start_dt:
+            end_dt += timedelta(days=1)
+
+        driver_time_limits.append(
+            int((end_dt - start_dt).total_seconds())
+        )
+
+        # MAX STOPS (CAPACITY)
+        driver_capacity.append(info.max_stops)
+
+#RUNNING THE OPTIMISER WITH ALL THE INFORMATION - DRIVERS AND DRIVERS LIMITS 
+    routes = optimize(
+    shipments=shipments,
+    drivers=drivers,
+    driver_time_limits=driver_time_limits,
+    driver_capacity=driver_capacity
+)
+
+    if not routes:
+        messages.warning(request, "No optimized routes could be generated.")
+        return redirect("shipment_list")
+
+
     updated_shipments = []
 
-    for driver_index, shipment_list in routes.items():
+    for driver_index, route_data in routes.items():
 
-        driver = driver_index 
-
-        if driver_index < 0 or driver_index >= len(drivers):
+        if (
+            not isinstance(driver_index, int)
+            or driver_index < 0
+            or driver_index >= len(drivers)
+        ):
             continue
 
         driver = drivers[driver_index]
 
+        shipment_list = route_data.get("shipments", [])
+
         for shipment in shipment_list:
-
             shipment.assigned_agent = driver
-            shipment.status = "Assigned to Driver"   # ✅ REQUIRED CHANGE
-
+            shipment.status = "Assigned to Driver"
             updated_shipments.append(shipment)
 
-    # BULK SAVE (fast + clean)
     if updated_shipments:
         Shipment.objects.bulk_update(
             updated_shipments,
             ["assigned_agent", "status"]
         )
 
-    # ============================
-    # MAP DATA
-    # ============================
-    colors = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"]
+    colors = [
+        "#e74c3c",
+        "#3498db",
+        "#2ecc71",
+        "#f39c12",
+        "#9b59b6",
+        "#1abc9c",
+        "#34495e",
+        "#d35400",
+    ]
 
     routes_data = []
 
-    for driver_index, shipment_list in routes.items():
+    for driver_index, route_data in routes.items():
 
-        if not isinstance(driver_index, int):
-            continue
-
-        if driver_index < 0 or driver_index >= len(drivers):
+        if (
+            not isinstance(driver_index, int)
+            or driver_index < 0
+            or driver_index >= len(drivers)
+        ):
             continue
 
         driver = drivers[driver_index]
+        schedule = driver_infos[driver_index]
+
+        shipment_list = route_data.get("shipments", [])
+        duration = route_data.get("duration", 0)
 
         routes_data.append({
+
+            # DRIVER INFO
             "driver_name": driver.get_full_name() or driver.username,
-            "color": colors[driver_index % len(colors)],
+            "driver_id": driver.id,
+
+            # SCHEDULE
+            "start_time": schedule.start_time.strftime("%H:%M"),
+            "end_time": schedule.end_time.strftime("%H:%M"),
+            "departure_time": schedule.start_time.strftime("%H:%M"),
+
+            # ROUTE INFO
+            "max_stops": schedule.max_stops,
+            "duration_minutes": round(duration / 60, 1),
             "count": len(shipment_list),
+
+            # MAP COLOR
+            "color": colors[driver_index % len(colors)],
+            "polyline": route_data.get("polyline"),
+            # DELIVERY STOPS
             "route": [
                 {
+                    # STOP ORDER
+                    "sequence": idx + 1,
+
+                    # LOCATION
                     "lat": s.latitude,
                     "lng": s.longitude,
-                    "label": f"{s.tracking_number} - {s.recipient_name}"
+
+                    # DELIVERY INFO
+                    "tracking_number": s.tracking_number,
+                    "recipient": s.recipient_name,
+                    "address": s.address,
+
+                    # ETA ESTIMATION
+                    "eta": (
+                        datetime.combine(date.today(), schedule.start_time)
+                        + timedelta(minutes=(idx * 15))
+                    ).strftime("%H:%M"),
+
+                    # LABEL
+                    "label":
+                        f"{s.tracking_number} - "
+                        f"{s.recipient_name}",
+
+                    # COLOR
+                    "color":
+                        colors[driver_index % len(colors)],
                 }
-                for s in shipment_list
+
+                for idx, s in enumerate(shipment_list)
+
                 if s.latitude and s.longitude
             ]
         })
-
-    # ============================
-    # SUCCESS MESSAGE
-    # ============================
+    routes_data_json = json.dumps(routes_data, cls=DjangoJSONEncoder)
     messages.success(
         request,
-        f"{len(updated_shipments)} shipment(s) assigned to drivers successfully."
+        f"{len(updated_shipments)} shipment(s) assigned across {len(routes_data)} driver(s)."
     )
-
-    return render(request, "shipments/routes.html", {
-        "routes_data": routes_data,
-        "drivers": drivers
-    })
+    print("POLYLINE SAMPLE:", routes_data[0].get("polyline"))
+    return render(
+        request,
+        "shipments/routes.html",
+        {
+            "routes_data": routes_data,
+            "routes_data_json": routes_data_json,
+            "drivers": drivers,
+        }
+    )

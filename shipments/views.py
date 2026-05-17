@@ -4,8 +4,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import permission_required,login_required
-from .models import Shipment,AppUser, Department, Driver_info
-from datetime import datetime,date,time
+from .models import Shipment,AppUser, Department, Driver_info,ShipmentHistory
+from datetime import datetime,date,time,timedelta
 from .forms import AppUserForm
 from django.contrib.auth.models import Group
 from shipments.forms import ShipmentForm
@@ -13,6 +13,9 @@ from django.db.models import Count
 from .services.geocoding import geocode
 import json
 from .services.optimiser import optimize
+from django.conf import settings
+from django.http import JsonResponse
+from django.core.serializers.json import DjangoJSONEncoder
 
 def dashboard(request):
     user = request.user
@@ -121,7 +124,7 @@ def create_user(request):
         'groups': groups,
     })
 
-#----------------------EDIT USER
+#----------------------EDIT USER-------------------------
 
 def edit_user(request, user_id):
     user = get_object_or_404(AppUser, id=user_id)
@@ -130,22 +133,29 @@ def edit_user(request, user_id):
     groups = Group.objects.all()
     current_group = user.groups.first()
 
-    if request.method == "POST" and form.is_valid():
-        user = form.save(commit=False)
+    if request.method == "POST":
 
-        
-        raw_password = form.cleaned_data.get('password')
-        if raw_password:
-            user.set_password(raw_password)
+        if form.is_valid():
+            user = form.save(commit=False)
 
-        user.save()
-        group_id = request.POST.get('group')
-        user.groups.clear()
-        if group_id:
-            group = Group.objects.get(id=group_id)
-            user.groups.add(group)
+            raw_password = form.cleaned_data.get('password')
+            if raw_password:
+                user.set_password(raw_password)
 
-        return redirect('users_list')
+            user.save()
+
+            group_id = request.POST.get('group')
+            user.groups.clear()
+
+            if group_id:
+                group = Group.objects.get(id=group_id)
+                user.groups.add(group)
+
+            messages.success(request, "User updated successfully.")
+            return redirect('users_list')
+
+        else:
+            messages.error(request, "Unable to update user. Please check the form for errors.")
 
     return render(request, 'shipments/user_creation.html', {
         'form': form,
@@ -323,6 +333,14 @@ def shipment_list(request):
                 shipment.assigned_agent = None
 
         shipment.save()
+        ShipmentHistory.objects.create(
+            shipment=shipment,
+            status=shipment.status,
+            department=shipment.department,
+            assigned_agent=shipment.assigned_agent,
+            changed_by=request.user,
+            note="Bulk update action"
+        )
         messages.success(request, "Shipment updated successfully!")
         return redirect("shipment_list")
 
@@ -347,11 +365,25 @@ def shipment_list(request):
         "is_admin": is_admin,
         "can_optimize": can_optimize,
     })
-# -------------------------------------------Login of Users------------------------------------------------------------------------------
+
+# -------------------------------------------shipment details ------------------------------------------------------------------------------
+def shipment_details(request, pk):
+    shipment = get_object_or_404(Shipment, pk=pk)
+
+    history = shipment.history.select_related(
+        "department",
+        "assigned_agent",
+        "changed_by"
+    ).order_by("-timestamp")
+    return render(request, "shipments/shipment_details.html", {
+        "shipment": shipment,
+        "history": history
+    })
+# -------------------------------------------Login/logout of Users------------------------------------------------------------------------------
 
 def login_view(request):
     if request.user.is_authenticated:
-        return redirect('shipment_list')  # redirect if already logged in
+        return redirect('shipment_list')  
 
     if request.method == "POST":
         username = request.POST.get('username')
@@ -361,7 +393,7 @@ def login_view(request):
         if user is not None:
             login(request, user)
             messages.success(request, f"Welcome, {user.first_name}!")
-            return redirect('shipment_list')
+            return redirect('dashboard')
         else:
             messages.error(request, "Invalid username or password")
 
@@ -372,7 +404,7 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     messages.success(request, "Logged out successfully")
-    return render(request, "shipments/login.html")
+    return redirect("login_view")
 
 
 # -------------------------------------------SCHEDULE DRIVER ------------------------------------------------------------------------------
@@ -454,6 +486,9 @@ def routes_page(request):
                 {
                     "lat": s.latitude,
                     "lng": s.longitude,
+                    "tracking_number": s.tracking_number,
+                    "recipient_name": s.recipient_name,
+                    "address": s.recipient_address,
                     "label": f"{s.tracking_number} - {s.recipient_name}"
                 }
                 for s in shipments
@@ -461,8 +496,8 @@ def routes_page(request):
         })
 
     return render(request, "shipments/routes.html", {
-    "routes_data_json": routes_data
-    })
+        "routes_data_json": routes_data 
+})
 # -------------------------------------------Bulk Action ------------------------------------------------------------------------------
 
 def bulk_action(request):
@@ -494,6 +529,7 @@ def bulk_action(request):
             # department
             if new_dept:
                 update_data["department_id"] = new_dept
+                update_data["assigned_agent"] = None
 
             # status
             if new_status:
@@ -508,7 +544,7 @@ def bulk_action(request):
 
                     if operations_dept:
                         update_data["department_id"] = operations_dept.id
-
+                    update_data["assigned_agent"] = None
                 else:
                     update_data["status"] = new_status
 
@@ -533,34 +569,251 @@ def bulk_action(request):
 
         # ================= OPTIMIZE =================
 
+        # elif action == "optimize":
+
+        #     qs = qs.filter(status__iexact="Ready For Delivery")
+        #     drivers = list(AppUser.objects.filter(
+        #         groups__name="Driver",
+        #         is_active=True
+        #     ))
+
+        #     if not qs.exists():
+        #         messages.warning(request, "No eligible shipments for optimisation.")
+        #         return redirect("shipment_list")
+
+        #     routes = optimize(qs, drivers)
+
         elif action == "optimize":
 
-            qs = qs.filter(status__iexact="Ready For Delivery")
-            drivers = list(AppUser.objects.filter(
-                groups__name="Driver",
-                is_active=True
-            ))
-
-            if not qs.exists():
-                messages.warning(request, "No eligible shipments for optimisation.")
-                return redirect("shipment_list")
-
-            routes = optimize(qs, drivers)
-
-    
-            for driver_index, shipment_list in routes.items():
-
-                driver = drivers[driver_index]
-
-                for shipment in shipment_list:
-                    shipment.assigned_agent = driver
-                    shipment.status = "Assigned to Driver"
-                    shipment.save()
-
-            messages.success(
-                request,
-                f"{qs.count()} shipment(s) optimised successfully."
+    # =====================================================
+    # GET SHIPMENTS
+    # =====================================================
+            qs = qs.filter(
+                status__iexact="Ready For Delivery"
             )
 
-    return redirect("routes_diplay")
+            if not qs.exists():
 
+                messages.warning(
+                    request,
+                    "No eligible shipments for optimisation."
+                )
+
+                return redirect("shipment_list")
+
+            # =====================================================
+            # GET AVAILABLE DRIVERS
+            # =====================================================
+
+            drivers = list(
+
+                AppUser.objects.filter(
+                    groups__name="Driver",
+                    is_active=True
+                )
+
+            )
+
+            if not drivers:
+
+                messages.warning(
+                    request,
+                    "No drivers available."
+                )
+
+                return redirect("shipment_list")
+
+            # =====================================================
+            # GET DRIVER SCHEDULES
+            # =====================================================
+
+            today = date.today()
+
+            driver_infos = Driver_info.objects.filter(
+                date=today,
+                driver__in=drivers,
+                is_available=True
+            ).select_related("driver")
+
+            driver_map = {
+                d.driver_id: d
+                for d in driver_infos
+            }
+
+            # =====================================================
+            # DRIVER LIMITS + CAPACITY
+            # =====================================================
+
+            driver_time_limits = []
+
+            driver_capacity = []
+
+            active_drivers = []
+
+            for driver in drivers:
+
+                info = driver_map.get(driver.id)
+
+                # SKIP DRIVER WITHOUT SCHEDULE
+                if not info:
+                    continue
+
+                # -----------------------------
+                # SHIFT START/END
+                # -----------------------------
+
+                start_dt = datetime.combine(
+                    today,
+                    info.start_time
+                )
+
+                end_dt = datetime.combine(
+                    today,
+                    info.end_time
+                )
+
+                # NIGHT SHIFT SUPPORT
+                if end_dt < start_dt:
+                    end_dt += timedelta(days=1)
+
+                shift_seconds = int(
+                    (end_dt - start_dt).total_seconds()
+                )
+
+                # -----------------------------
+                # STORE DRIVER DATA
+                # -----------------------------
+
+                active_drivers.append(driver)
+
+                driver_time_limits.append(
+                    shift_seconds
+                )
+
+                driver_capacity.append(
+                    info.max_stops or 999
+                )
+
+            # =====================================================
+            # VALIDATION
+            # =====================================================
+
+            if not active_drivers:
+
+                messages.warning(
+                    request,
+                    "No scheduled drivers available."
+                )
+
+                return redirect("shipment_list")
+
+            # =====================================================
+            # RUN GOOGLE OPTIMIZER
+            # =====================================================
+
+            MAX_OPTIMIZE = 9
+
+            MAX_PER_RUN = 50
+
+            qs = qs.order_by("id")[:MAX_PER_RUN]
+
+            routes = optimize(
+                qs,
+                active_drivers,
+                driver_time_limits,
+                driver_capacity
+            )
+
+            # =====================================================
+            # NO ROUTES
+            # =====================================================
+
+            if not routes:
+
+                messages.warning(
+                    request,
+                    "No optimized routes generated."
+                )
+
+                return redirect("shipment_list")
+
+            # =====================================================
+            # ASSIGN SHIPMENTS
+            # =====================================================
+
+            updated_shipments = []
+
+            history_logs =[]
+
+            for driver_index, route_data in routes.items():
+
+                # SAFETY CHECK
+                if driver_index >= len(active_drivers):
+                    continue
+
+                driver = active_drivers[driver_index]
+
+                shipment_list = route_data.get(
+                    "shipments",
+                    []
+                )
+
+                for shipment in shipment_list:
+
+                    if not shipment:
+                        continue
+
+                    shipment.assigned_agent = driver
+
+                    shipment.status = "Assigned to Driver"
+
+                    updated_shipments.append(
+                        shipment
+                    )
+                history_logs.append(
+                    ShipmentHistory(
+                        shipment=shipment,
+                        status=shipment.status,
+                        department=shipment.department,
+                        assigned_agent=driver,
+                        changed_by=request.user,
+                        note="Auto-optimized route assignment"
+                    )
+                )
+            # =====================================================
+            # BULK UPDATE
+            # =====================================================
+
+            if updated_shipments:
+
+                Shipment.objects.bulk_update(
+                    updated_shipments,
+                    [
+                        "assigned_agent",
+                        "status"
+                    ]
+                )
+
+            # =====================================================
+            # SUCCESS MESSAGE
+            # =====================================================
+
+            total_routes = len(routes)
+
+            total_shipments = len(updated_shipments)
+
+            messages.success(
+
+                request,
+
+                f"{total_shipments} shipment(s) "
+                f"optimized across "
+                f"{total_routes} driver(s)."
+
+            )
+
+            # =====================================================
+            # REDIRECT TO MAP
+            # =====================================================
+
+            return redirect("routes_diplay")

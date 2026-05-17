@@ -10,7 +10,7 @@ class AppUserForm(forms.ModelForm):
             'class': 'border rounded px-2 py-1 w-full',
             'placeholder': 'Enter password'
         }),
-        required=True
+        required=False
     )
 
     class Meta:
@@ -31,12 +31,12 @@ class AppUserForm(forms.ModelForm):
     def save(self, commit=True):
         user = super().save(commit=False)
 
-        # Hash password
+        
         raw_password = self.cleaned_data.get('password')
         if raw_password:
             user.set_password(raw_password)
 
-        # Clear zone if not Operations
+        
         if user.department and user.department.name != 'Operations':
             user.zone = None
 

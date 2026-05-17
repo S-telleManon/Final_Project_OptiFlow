@@ -7,77 +7,250 @@
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@mapbox/polyline"></script>
 
 <div class="flex gap-4">
 
-    <!-- MAP -->
     <div id="map" class="w-2/3 h-[700px] rounded-xl shadow"></div>
 
-    <!-- DRIVER PANEL -->
     <div class="w-1/3 bg-white p-4 rounded-xl shadow overflow-y-auto">
-
-        <h2 class="text-lg font-bold mb-4">Drivers Overview</h2>
-
+        <h2 class="text-lg font-bold mb-4">Drivers</h2>
         <div id="driverList"></div>
-
     </div>
 
 </div>
 
-<!-- SAFE JSON FROM DJANGO -->
 {{ routes_data_json|json_script:"routes-data" }}
 
 <script>
 
-    const routes = JSON.parse(
-        document.getElementById("routes-data").textContent
-    );
+// small sanity check
+console.log("polyline lib?", window.polyline);
 
-    console.log("ROUTES:", routes);
+let data = [];
 
+try {
+    const el = document.getElementById("routes-data");
+    const parsed = JSON.parse(el.textContent || "[]");
+    data = typeof parsed === "string" ? JSON.parse(parsed) : parsed;
+} catch (err) {
+    console.log("bad json", err);
+}
 
-    var map = L.map('map').setView([-20.1609, 57.5012], 11);
+console.log("loaded routes", data);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap'
-    }).addTo(map);
+// map init
+const map = L.map("map").setView([-20.1609, 57.5012], 11);
 
-    let html = "";
+window.addEventListener("load", () => {
+    setTimeout(() => map.invalidateSize(true), 500);
+});
 
-    routes.forEach(driver => {
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap"
+}).addTo(map);
 
-        // driver panel
-        html += `
-            <div class="mb-3 p-3 border rounded">
-                <div style="color:${driver.color}">
+// a few fallback colors
+const palette = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6"];
+
+// warehouse marker (just static)
+const warehouse = L.marker([-20.19638, 57.48478], {
+    icon: L.divIcon({
+        className: "",
+        html: `<div style="
+            background:#111;
+            color:#fff;
+            width:34px;
+            height:34px;
+            border-radius:50%;
+            display:flex;
+            align-items:center;
+            justify-content:center;">🏢</div>`,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17]
+    })
+}).addTo(map).bindPopup("Warehouse");
+
+// simple numbered marker
+function pin(number, color) {
+    return L.divIcon({
+        className: "",
+        html: `<div style="
+            background:${color};
+            color:#fff;
+            width:32px;
+            height:32px;
+            border-radius:50%;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-weight:600;">
+            ${number}
+        </div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+    });
+}
+
+let ui = "";
+let all = [];
+
+let lines = [];
+let groups = [];
+
+// main loop
+data.forEach((driver, idx) => {
+
+    const color = driver.color || palette[idx % palette.length];
+
+    // --- panel ---
+    ui += `
+        <div class="mb-4 border rounded-lg shadow-sm overflow-hidden">
+
+            <div class="p-3 cursor-pointer hover:bg-gray-100"
+                 onclick="focusDriver(${idx})">
+
+                <div style="color:${color}; font-weight:600;">
                     🚗 ${driver.driver_name}
                 </div>
-                <div>${driver.count} deliveries</div>
+
+                <div class="text-sm text-gray-500">
+                    ${driver.count} stops
+                </div>
+
+                <button onclick="toggleStops(event, ${idx})"
+                        class="text-xs text-blue-500 mt-2">
+                    show stops
+                </button>
+
             </div>
-        `;
 
-        let latlngs = [];
+            <div id="stops-${idx}" class="hidden border-t bg-gray-50">
 
-        driver.route.forEach(stop => {
+                ${(driver.route || []).map((s, i) => `
+                    <div class="p-3 border-b">
+                        <div class="font-semibold">
+                            #${i + 1} ${s.tracking_number || ""}
+                        </div>
+                        <div class="text-sm">
+                            ${s.recipient_name || ""}
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            ${s.address || ""}
+                        </div>
+                    </div>
+                `).join("")}
 
-            const point = [stop.lat, stop.lng];
-            latlngs.push(point);
+            </div>
 
-            L.marker(point)
-                .addTo(map)
-                .bindPopup(stop.label);
-        });
+        </div>
+    `;
 
-        if (latlngs.length > 0) {
-            L.polyline(latlngs, {
-                color: driver.color,
-                weight: 4
-            }).addTo(map);
-        }
+    // --- markers ---
+    const markers = [];
+    const coords = [];
 
+    (driver.route || []).forEach((s, i) => {
+
+        const lat = parseFloat(s.lat);
+        const lng = parseFloat(s.lng);
+
+        if (!lat || !lng) return;
+
+        const point = [lat, lng];
+
+        coords.push(point);
+        all.push(point);
+
+        const m = L.marker(point, {
+            icon: pin(i + 1, color)
+        }).addTo(map);
+
+        m.bindPopup(`
+            <b>${s.tracking_number || ""}</b><br>
+            ${s.recipient_name || ""}<br>
+            ${s.address || ""}
+        `);
+
+        markers.push(m);
     });
 
-    document.getElementById("driverList").innerHTML = html;
+    groups.push(markers);
+
+    // --- route line ---
+    let line;
+
+    if (driver.polyline && window.polyline) {
+
+        try {
+            const decoded = window.polyline.decode(driver.polyline);
+
+            const path = decoded.map(p => [p[0], p[1]]);
+
+            line = L.polyline(path, {
+                color,
+                weight: 5,
+                opacity: 0.8
+            }).addTo(map);
+
+        } catch (e) {
+            console.log("route decode failed", e);
+        }
+
+    } else if (coords.length > 1) {
+
+        line = L.polyline(coords, {
+            color,
+            weight: 5,
+            opacity: 0.6,
+            dashArray: "6,6"
+        }).addTo(map);
+    }
+
+    lines.push(line);
+
+});
+
+// render sidebar
+document.getElementById("driverList").innerHTML = ui;
+
+// fit map once
+if (all.length) {
+    map.fitBounds(all, { padding: [40, 40] });
+}
+
+// toggle stops
+function toggleStops(e, i) {
+    e.stopPropagation();
+    const el = document.getElementById(`stops-${i}`);
+    if (el) el.classList.toggle("hidden");
+}
+
+// focus driver
+function focusDriver(i) {
+
+    lines.forEach((l, idx) => {
+        if (!l) return;
+
+        if (idx === i) {
+            l.setStyle({ weight: 8, opacity: 1 });
+            map.fitBounds(l.getBounds(), { padding: [40, 40] });
+            l.bringToFront();
+        } else {
+            l.setStyle({ weight: 3, opacity: 0.2 });
+        }
+    });
+
+    groups.forEach((ms, idx) => {
+        ms.forEach(m => {
+            m.setOpacity(idx === i ? 1 : 0.2);
+        });
+    });
+
+    document.querySelectorAll("[id^='stops-']").forEach((el, idx) => {
+        el.classList.toggle("hidden", idx !== i);
+    });
+}
 
 </script>
 

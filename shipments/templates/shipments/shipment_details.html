@@ -1,0 +1,183 @@
+{% extends 'shipments/base.html' %}
+
+{% block title %}Shipment Details{% endblock %}
+{% block page_title %}Shipment Details 📦{% endblock %}
+
+{% block content %}
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<div class="grid grid-cols-3 gap-4">
+
+    <!-- LEFT SIDE -->
+    <div class="col-span-2 bg-white p-5 rounded-xl shadow">
+
+        <h2 class="text-xl font-bold mb-4">
+            📦 Tracking: {{ shipment.tracking_number }}
+        </h2>
+
+        <!-- BASIC INFO -->
+        <div class="grid grid-cols-2 gap-4 text-sm">
+
+            <div><b>Status:</b> {{ shipment.status }}</div>
+            <div><b>Category:</b> {{ shipment.category }}</div>
+            <div><b>Commodity:</b> {{ shipment.commodity }}</div>
+            <div><b>Department:</b> {{ shipment.department }}</div>
+
+            <div><b>Packages:</b> {{ shipment.no_of_pkg }}</div>
+            <div><b>Weight:</b> {{ shipment.weight }} kg</div>
+
+            <div><b>Customs Value:</b> {{ shipment.customs_currency }} {{ shipment.customs_value }}</div>
+            <div><b>Created:</b> {{ shipment.created_at }}</div>
+
+        </div>
+
+        <hr class="my-4">
+
+        <!-- SHIPPER -->
+        <h3 class="font-bold">📤 Shipper</h3>
+        <p class="text-sm mt-2">
+            <b>{{ shipment.shipper_company }}</b><br>
+            {{ shipment.shipper_name }}<br>
+            {{ shipment.shipper_address }}<br>
+            {{ shipment.shipper_country }}
+        </p>
+
+        <hr class="my-4">
+
+        <!-- RECEIVER -->
+        <h3 class="font-bold">📥 Recipient</h3>
+        <p class="text-sm mt-2">
+            <b>{{ shipment.recipient_company }}</b><br>
+            {{ shipment.recipient_name }}<br>
+            {{ shipment.recipient_address }}<br>
+            {{ shipment.recipient_country }}<br>
+            📞 {{ shipment.recipient_phone }}
+        </p>
+
+        <hr class="my-4">
+
+        <!-- ASSIGNMENT -->
+        <h3 class="font-bold">👤 Assignment</h3>
+
+        <div class="text-sm mt-2">
+            <div>
+                <b>Assigned Agent:</b>
+                {% if shipment.assigned_agent %}
+                    {{ shipment.assigned_agent.get_full_name }}
+                {% else %}
+                    <span class="text-gray-500">-- Select Agent --</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <hr class="my-4">
+
+        <!-- HISTORY TOGGLE -->
+        <div class="flex justify-between items-center cursor-pointer"
+             onclick="toggleHistory()">
+
+            <h3 class="font-bold text-lg">📜 History</h3>
+            <span id="historyArrow">▼</span>
+
+        </div>
+
+        <!-- HISTORY BOX -->
+        <div id="historyBox"
+             class="hidden mt-3 space-y-3 max-h-[350px] overflow-y-auto pr-2">
+
+            {% for h in history %}
+
+                <div class="border-l-4 border-blue-500 pl-3 py-2 bg-gray-50 rounded">
+
+                    <div class="text-xs text-gray-500">
+                        {{ h.timestamp }}
+                    </div>
+
+                    <div class="text-sm font-semibold">
+                        Status: {{ h.status }}
+                    </div>
+
+                    <div class="text-sm">
+                        Department: <b>{{ h.department }}</b>
+                    </div>
+
+                    <div class="text-sm">
+                        Agent:
+                        {% if h.assigned_agent %}
+                            {{ h.assigned_agent.get_full_name }}
+                        {% else %}
+                            Unassigned
+                        {% endif %}
+                    </div>
+
+                    <div class="text-xs text-gray-600 mt-1">
+                        Changed by: {{ h.changed_by }}
+                    </div>
+
+                    {% if h.note %}
+                        <div class="text-xs italic text-gray-500 mt-1">
+                            {{ h.note }}
+                        </div>
+                    {% endif %}
+
+                </div>
+
+            {% empty %}
+                <div class="text-sm text-gray-500">
+                    No history available.
+                </div>
+            {% endfor %}
+
+        </div>
+
+    </div>
+
+    <!-- RIGHT SIDE (MAP FIXED) -->
+    <div class="bg-white p-4 rounded-xl shadow h-fit">
+
+        <h3 class="font-bold mb-2">📍 Location</h3>
+
+        <div id="map" class="w-full h-[400px] rounded-lg"></div>
+
+    </div>
+
+</div>
+
+<!-- SCRIPTS (CLEAN POSITION) -->
+<script>
+function toggleHistory() {
+    const box = document.getElementById("historyBox");
+    const arrow = document.getElementById("historyArrow");
+
+    if (box.classList.contains("hidden")) {
+        box.classList.remove("hidden");
+        arrow.innerHTML = "▲";
+    } else {
+        box.classList.add("hidden");
+        arrow.innerHTML = "▼";
+    }
+}
+
+// MAP INIT
+const lat = {{ shipment.latitude|default:"null" }};
+const lng = {{ shipment.longitude|default:"null" }};
+
+const map = L.map("map").setView([-20.1609, 57.5012], 11);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap"
+}).addTo(map);
+
+if (lat && lng) {
+    L.marker([lat, lng])
+        .addTo(map)
+        .bindPopup("📦 {{ shipment.tracking_number }}")
+        .openPopup();
+
+    map.setView([lat, lng], 13);
+}
+</script>
+
+{% endblock %}
