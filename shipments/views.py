@@ -770,15 +770,15 @@ def bulk_action(request):
                     updated_shipments.append(
                         shipment
                     )
-                history_logs.append(
-                    ShipmentHistory(
-                        shipment=shipment,
-                        status=shipment.status,
-                        department=shipment.department,
-                        assigned_agent=driver,
-                        changed_by=request.user,
-                        note="Auto-optimized route assignment"
-                    )
+                    history_logs.append(
+                        ShipmentHistory(
+                            shipment=shipment,
+                            status=shipment.status,
+                            department=shipment.department,
+                            assigned_agent=driver,
+                            changed_by=request.user,
+                            note="Auto-optimized route assignment"
+                        )
                 )
             # =====================================================
             # BULK UPDATE

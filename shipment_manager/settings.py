@@ -11,6 +11,10 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,7 +29,7 @@ SECRET_KEY = 'django-insecure-2yx#9yz^rgr*2%72_x2n5&6!fk*29goktr%oz1q$cnp)8jx&@p
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -48,6 +52,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+
 ]
 
 ROOT_URLCONF = 'shipment_manager.urls'
@@ -75,8 +81,12 @@ WSGI_APPLICATION = 'shipment_manager.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('DB_NAME'),
+        'USER': os.environ.get('DB_USER'),
+        'PASSWORD': os.environ.get('DB_PASSWORD'),
+        'HOST': os.environ.get('DB_HOST'),
+        'PORT': '5432',
     }
 }
 
@@ -105,7 +115,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Indian/Mauritius'
 
 USE_I18N = True
 
@@ -122,3 +132,14 @@ LOGIN_URL = '/shipments/login/'
 LOGIN_REDIRECT_URL = '/shipments/list/'  
 
 AUTH_USER_MODEL = 'shipments.AppUser'
+
+WAREHOUSE_NAME = "FedEx Mauritius - Pailles"
+WAREHOUSE_LAT = -20.19638
+WAREHOUSE_LON = 57.48478
+GOOGLE_MAPS_KEY = "AIzaSyCkVQ72hfXKOxiZQpC_hNLwhhZHwFPH_5Y"
+
+GOOGLE_PROJECT_ID = "optiflow-496514"
+
+GOOGLE_ROUTE_OPTIMIZATION_KEY = (
+    BASE_DIR / "service-account.json"
+)
