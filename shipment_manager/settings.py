@@ -14,7 +14,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 load_dotenv()
-
+import json
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -141,6 +141,16 @@ GOOGLE_MAPS_KEY = "AIzaSyCkVQ72hfXKOxiZQpC_hNLwhhZHwFPH_5Y"
 
 GOOGLE_PROJECT_ID = "optiflow-496514"
 
-GOOGLE_ROUTE_OPTIMIZATION_KEY = (
-    BASE_DIR / "service-account.json"
-)
+# GOOGLE_ROUTE_OPTIMIZATION_KEY = (
+#     BASE_DIR / "service-account.json"
+# )
+LOCAL_SERVICE_ACCOUNT = BASE_DIR / "service-account.json"
+
+if os.environ.get('GOOGLE_CREDS_JSON'):
+    # On Vercel, parse the raw JSON string directly from Environment Variables
+    GOOGLE_ROUTE_OPTIMIZATION_KEY = json.loads(os.environ.get('GOOGLE_CREDS_JSON'))
+elif LOCAL_SERVICE_ACCOUNT.exists():
+    # Locally, use the file path
+    GOOGLE_ROUTE_OPTIMIZATION_KEY = LOCAL_SERVICE_ACCOUNT
+else:
+    GOOGLE_ROUTE_OPTIMIZATION_KEY = None

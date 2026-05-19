@@ -3,3 +3,8 @@ whitenoise
 gunicorn
 psycopg2-binary
 python-dotenv
+numpy
+googlemaps
+ortools
+requests
+google-maps-services
