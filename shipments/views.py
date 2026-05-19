@@ -12,7 +12,7 @@ from shipments.forms import ShipmentForm
 from django.db.models import Count
 from .services.geocoding import geocode
 import json
-from .services.optimiser import optimize
+from shipments.services.optimiser import optimize
 from django.conf import settings
 from django.http import JsonResponse
 from django.core.serializers.json import DjangoJSONEncoder

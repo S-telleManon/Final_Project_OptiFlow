@@ -2,7 +2,7 @@ from django.urls import path
 from django.contrib.auth import views as auth_views
 from . import views
 from django.contrib.auth.views import PasswordChangeView
-from .services.optimiser import run_optimizer
+from shipments.services.optimiser import run_optimizer
 
 urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
