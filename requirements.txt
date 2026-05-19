@@ -1,10 +1,9 @@
 django
 whitenoise
 gunicorn
-psycopg2-binary
+psycopg[binary]
 python-dotenv
 numpy
 googlemaps
 ortools
 requests
-google-maps-services
