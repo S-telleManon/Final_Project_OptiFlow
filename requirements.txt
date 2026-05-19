@@ -7,3 +7,4 @@ numpy
 googlemaps
 ortools
 requests
+scikit-learn
