@@ -128,9 +128,7 @@ USE_TZ = True
 STATIC_URL = '/static/'
 
 # This tells Django where your source files live
-STATICFILES_DIRS = [
-    BASE_DIR / "shipments" / "static"
-]
+STATICFILES_DIRS = []
 
 # This is the exact destination Vercel expects to find
 STATIC_ROOT = BASE_DIR / 'staticfiles_build' / 'static'
