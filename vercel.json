@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "framework": null,
   "builds": [
     {
       "src": "shipment_manager/wsgi.py",
@@ -8,10 +7,6 @@
     }
   ],
   "routes": [
-    {
-      "src": "/static/(.*)",
-      "dest": "/staticfiles_build/static/$1"
-    },
     {
       "src": "/(.*)",
       "dest": "shipment_manager/wsgi.py"
