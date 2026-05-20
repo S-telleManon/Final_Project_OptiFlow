@@ -39,38 +39,43 @@
 </div> -->
 
 <!-- PIE CHARTS FOR MANAGERS AND ADMINS -->
+<!-- Include the Chart.js Datalabels Plugin in your head or before the charts script -->
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+
+<!-- PIE CHARTS FOR MANAGERS AND ADMINS -->
 {% if is_manager or is_admin %}
-<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
 
     <!-- Shipment Status -->
-    <div class="bg-white p-4 rounded-s shadow-lg w-full flex justify-center items-center">
-        <div class="text-center">
+    <div class="bg-white p-6 rounded-xl shadow-lg w-full flex justify-center items-center">
+        <!-- Increased max-width container so charts have breathing room to look bigger -->
+        <div class="text-center w-full max-w-md">
             <h3 class="text-lg font-semibold mb-4">Shipment Status Distribution</h3>
-            <canvas id="statusChart" width="200" height="200"></canvas>
+            <canvas id="statusChart"></canvas>
         </div>
     </div>
 
     <!-- Shipments by Department -->
-    <div class="bg-white p-4 rounded-s shadow-lg w-full flex justify-center items-center">
-        <div class="text-center">
+    <div class="bg-white p-6 rounded-xl shadow-lg w-full flex justify-center items-center">
+        <div class="text-center w-full max-w-md">
             <h3 class="text-lg font-semibold mb-4">Shipments by Department</h3>
-            <canvas id="deptChart" width="200" height="200"></canvas>
+            <canvas id="deptChart"></canvas>
         </div>
     </div>
 
 </div>
 {% else %}
 <!-- For regular users, only show their own shipment status -->
-<div class="bg-white p-4 rounded-s shadow-lg w-1/2 mx-auto mt-6 flex justify-center items-center">
-    <div class="text-center">
+<div class="bg-white p-6 rounded-xl shadow-lg md:w-1/2 mx-auto mt-6 mb-6 flex justify-center items-center">
+    <div class="text-center w-full max-w-md">
         <h3 class="text-lg font-semibold mb-4">Your Shipment Status</h3>
-        <canvas id="statusChart" width="200" height="200"></canvas>
+        <canvas id="statusChart"></canvas>
     </div>
 </div>
 {% endif %}
 
 <!-- SUMMARY CARDS -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+<!-- <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
     <div class="bg-white p-4 rounded-xl shadow hover:scale-105 transition text-center">
         <h2 class="text-black">Total Shipments</h2>
         <p class="text-2xl font-bold">{{ total }}</p>
@@ -85,10 +90,26 @@
             </p>
         </div>
     {% endfor %}
-</div>
+</div> -->
 
 <!-- CHART JS -->
 <script>
+    // Register the datalabels plugin globally so it hooks into Chart.js
+    Chart.register(ChartDataLabels);
+
+    // Shared configuration for rendering the data numbers nicely over the text blocks
+    const datalabelOptions = {
+        color: '#ffffff', // White numbers stand out great on dark/vibrant slices
+        font: {
+            weight: 'bold',
+            size: 14
+        },
+        formatter: (value) => {
+            // Only display the slice number if it's greater than 0
+            return value > 0 ? value : '';
+        }
+    };
+
     const statusCtx = document.getElementById('statusChart');
     new Chart(statusCtx, {
         type: 'pie',
@@ -99,7 +120,13 @@
                 backgroundColor: ['#ffd966','#ef4444','#facc15','#3b82f6','#a855f7']
             }]
         },
-        options: { responsive: false }
+        options: { 
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                datalabels: datalabelOptions
+            }
+        }
     });
 
     {% if is_manager or is_admin %}
@@ -113,10 +140,17 @@
                 backgroundColor: ['#4D148C','#FF6200','#facc15','#ef4444','#a855f7']
             }]
         },
-        options: { responsive: false }
+        options: { 
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                datalabels: datalabelOptions
+            }
+        }
     });
     {% endif %}
 </script>
+
 <script>
     function updateDateTime() {
         const now = new Date();
@@ -128,8 +162,10 @@
             hour: '2-digit',
             minute: '2-digit'
         };
-        document.getElementById('currentDateTime').textContent =
-            now.toLocaleDateString('en-US', options);
+        const element = document.getElementById('currentDateTime');
+        if (element) {
+            element.textContent = now.toLocaleDateString('en-US', options);
+        }
     }
 
     updateDateTime();

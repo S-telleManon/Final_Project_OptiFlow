@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import permission_required,login_required
-from .models import Shipment,AppUser, Department, Driver_info,ShipmentHistory
+from shipments.models import Shipment,AppUser, Department, Driver_info,ShipmentHistory
 from datetime import datetime,date,time,timedelta
 from .forms import AppUserForm
 from django.contrib.auth.models import Group
@@ -16,6 +16,10 @@ from shipments.services.optimiser import optimize
 from django.conf import settings
 from django.http import JsonResponse
 from django.core.serializers.json import DjangoJSONEncoder
+from django.shortcuts import render, redirect
+import csv
+
+
 
 def dashboard(request):
     user = request.user
@@ -166,7 +170,7 @@ def edit_user(request, user_id):
         'user_id': user.id,
     })
 
-#---------------DELETE USER
+#---------------DELETE USER-----------------------------------------------------
 def delete_user(request, user_id):
     user = get_object_or_404(AppUser, id=user_id)
 
@@ -180,13 +184,6 @@ def delete_user(request, user_id):
         'user': user
     })
 # -------------------------------------------uploading of shipments------------------------------------------------------------------------------
-
-from django.shortcuts import render, redirect
-from django.contrib import messages
-from shipments.models import Shipment, Department
-from django.contrib.auth.models import Group
-import csv
-
 
 def clean_address(address):
     return " ".join(address.split()).strip()
@@ -288,73 +285,126 @@ def upload(request):
 @login_required
 def shipment_list(request):
     user = request.user
-    is_manager = user.groups.filter(name__iexact="Manager").exists()
     is_admin = user.is_superuser  
+    is_manager = user.groups.filter(name__iexact="Manager").exists()
 
     can_optimize = (
-    (user.department and user.department.name == "operations")
-    or is_manager
-    or is_admin
+        (user.department and user.department.name.lower() == "operations")
+        or is_manager
+        or is_admin
     )
 
     if request.method == "POST":
         shipment_id = request.POST.get("shipment_id")
         shipment = get_object_or_404(Shipment, id=shipment_id)
 
-       # ------Checking if superuser----
-        if not is_admin and not is_manager and shipment.assigned_agent != user:
-            messages.error(request, "You cannot edit this shipment.")
+        # -------------------------------------------------------------------------
+        # STEP 1: PERMISSION VALIDATION
+        # -------------------------------------------------------------------------
+        has_modify_permission = False
+
+        if is_admin:
+            has_modify_permission = True
+        elif is_manager:
+            # Managers can edit any files currently sitting in their department
+            if shipment.department == user.department:
+                has_modify_permission = True
+        else:
+            # Regular agents can only edit files directly assigned to them
+            if shipment.assigned_agent == user:
+                has_modify_permission = True
+
+        if not has_modify_permission:
+            messages.error(request, "Access Denied: You do not have permission to modify this shipment.")
             return redirect("shipment_list")
 
-        # ------updating Department ----
+        # -------------------------------------------------------------------------
+        # STEP 2: PROCESS UPDATES (HAND-OFF LOGIC)
+        # -------------------------------------------------------------------------
+        department_changed = False
+
+        # ------ Updating Department ----
         dept_id = request.POST.get("department")
         if dept_id:
-            department = Department.objects.filter(id=dept_id).first()
-            if department:
-                shipment.department = department
+            new_department = Department.objects.filter(id=dept_id).first()
+            if new_department and shipment.department != new_department:
+                shipment.department = new_department
+                department_changed = True
 
-        # ------updating status----
+        # ------ Updating Status ----
         status = request.POST.get("status")
         if status:
-            shipment.status = status
             if status.lower() == "cleared":
                 shipment.status = "Ready for Delivery"
                 operations_dept = Department.objects.filter(name__iexact="Operations").first()
-                if operations_dept:
+                if operations_dept and shipment.department != operations_dept:
                     shipment.department = operations_dept
-                
+                    department_changed = True
+            else:
+                shipment.status = status
 
-        # ------Only Managers & Admins----
+        # ------ Handling Agent Assignments & Hand-offs ----
         if is_manager or is_admin:
+            # Managers can explicitly assign or clear agents within their department view
             agent_id = request.POST.get("assigned_agent")
             if agent_id:
                 shipment.assigned_agent_id = agent_id
             else:
                 shipment.assigned_agent = None
+        else:
+            # It's a Regular User (Agent). If they shifted the department away:
+            if department_changed:
+                shipment.assigned_agent = None          # Clear out the assignment
+                shipment.status = "Assigned to User"    # Update status per requirement
 
         shipment.save()
+        
+        # Save History Audit trail
         ShipmentHistory.objects.create(
             shipment=shipment,
             status=shipment.status,
             department=shipment.department,
             assigned_agent=shipment.assigned_agent,
             changed_by=request.user,
-            note="Bulk update action"
+            note="Department shift and automatic assignment reset." if department_changed else "Manual update action"
         )
+        
         messages.success(request, "Shipment updated successfully!")
         return redirect("shipment_list")
 
-     # ------Get Filter---
+
     if is_admin:
         shipments = Shipment.objects.all()
     elif is_manager:
-        shipments = Shipment.objects.filter(department=user.department)
+
+        if user.department:
+            shipments = Shipment.objects.filter(department=user.department)
+        else:
+            shipments = Shipment.objects.none()  
     else:
         shipments = Shipment.objects.filter(assigned_agent=user)
 
+
+    tracking = request.GET.get("tracking")
+    client = request.GET.get("client")
+    status_filter = request.GET.get("status")
+    agent_filter = request.GET.get("agent")
+    department_filter = request.GET.get("department")
+
+    if tracking:
+        shipments = shipments.filter(tracking_number__icontains=tracking)
+    if client:
+        shipments = shipments.filter(recipient_name__icontains=client)
+    if status_filter:
+        shipments = shipments.filter(status=status_filter)
+    if agent_filter:
+        shipments = shipments.filter(assigned_agent_id=agent_filter)
+    if department_filter:
+        shipments = shipments.filter(department_id=department_filter)
+    # Context items for UI population
     departments = Department.objects.all()
     users = AppUser.objects.all()
-    statuses = ['Uploaded', 'In Progress', 'Cleared','Ready for Delivery','Assigned to Driver','Out for Delivery']
+    statuses = ['Uploaded', 'In Progress', 'Cleared', 'Ready for Delivery', 'Assigned to Driver', 'Out for Delivery', 'Assigned to User']
 
     return render(request, "shipments/shipment_list.html", {
         "shipments": shipments,
@@ -365,7 +415,6 @@ def shipment_list(request):
         "is_admin": is_admin,
         "can_optimize": can_optimize,
     })
-
 # -------------------------------------------shipment details ------------------------------------------------------------------------------
 def shipment_details(request, pk):
     shipment = get_object_or_404(Shipment, pk=pk)
@@ -414,10 +463,8 @@ def driver_schedule_view(request):
 
     today = date.today()
 
-    # 1. GET ALL DRIVERS
     drivers = AppUser.objects.filter(groups__name="Driver")
 
-    # 2. AUTO CREATE SCHEDULE IF NOT EXISTS
     for d in drivers:
         Driver_info.objects.get_or_create(
             driver=d,
@@ -501,319 +548,223 @@ def routes_page(request):
 # -------------------------------------------Bulk Action ------------------------------------------------------------------------------
 
 def bulk_action(request):
+    if request.method != "POST":
+        return redirect("shipment_list")
 
-    if request.method == "POST":
+    user = request.user
+    is_manager = user.groups.filter(name__iexact="Manager").exists()
+    is_admin = user.is_superuser
+    can_optimize = (user.department and user.department.name == "operations") or is_manager or is_admin
 
-        action = request.POST.get("action")
-        selected_ids = request.POST.getlist("selected_shipments")
+    action = request.POST.get("action")
+    selected_ids = request.POST.getlist("selected_shipments")
 
+    if not selected_ids:
+        messages.warning(request, "No shipments selected.")
+        return redirect("shipment_list")
+
+    qs = Shipment.objects.filter(id__in=selected_ids)
+
+
+#============================REASSIGN====================================
+  
+    if action == "reassign":
         new_dept = request.POST.get("bulk_department")
         new_status = request.POST.get("bulk_status")
         bulk_user = request.POST.get("bulk_user")
+        update_data = {}
 
-        print("ACTION:", action)
-        print("IDS:", selected_ids)
+        if new_dept:
+            update_data["department_id"] = new_dept
+            update_data["assigned_agent"] = None
 
-        # ---------------- NO SELECTION ----------------
-        if not selected_ids:
+        if new_status:
+            if new_status.lower() == "cleared":
+                update_data["status"] = "Ready for Delivery"
+                
+                ops_dept = Department.objects.filter(name__iexact="Operations").first()
+                if ops_dept:
+                    update_data["department_id"] = ops_dept.id
+                update_data["assigned_agent"] = None
+            else:
+                update_data["status"] = new_status
+
+        if bulk_user:
+            update_data["assigned_agent_id"] = bulk_user
+
+        if update_data:
+            updated_count = qs.update(**update_data)
+            messages.success(request, f"{updated_count} shipment(s) updated successfully.")
+        else:
+            messages.warning(request, "No changes selected.")
+
+        return redirect("shipment_list")
+
+#=============================================== OPTIMIZE ROUTES======================
+
+    elif action == "optimize":
+        qs = qs.filter(status__iexact="Ready For Delivery")
+        if not qs.exists():
+            messages.warning(request, "No eligible shipments for optimisation.")
+            return redirect("shipment_list")
+
+        drivers = list(AppUser.objects.filter(groups__name="Driver", is_active=True))
+        if not drivers:
+            messages.warning(request, "No drivers available.")
+            return redirect("shipment_list")
+
+        # Fetch driver shifts for today
+        today = date.today()
+        driver_infos = Driver_info.objects.filter(
+            date=today, 
+            driver__in=drivers, 
+            is_available=True
+        ).select_related("driver")
+        
+        driver_map = {d.driver_id: d for d in driver_infos}
+
+        driver_time_limits = []
+        driver_capacity = []
+        active_drivers = []
+
+        for driver in drivers:
+            info = driver_map.get(driver.id)
+            if not info:
+                continue  
+
+            # Calculate shift durations
+            start_dt = datetime.combine(today, info.start_time)
+            end_dt = datetime.combine(today, info.end_time)
+            
+            if end_dt < start_dt:  # Overnight shift fallback
+                end_dt += timedelta(days=1)
+
+            shift_seconds = int((end_dt - start_dt).total_seconds())
+
+            active_drivers.append(driver)
+            driver_time_limits.append(shift_seconds)
+            driver_capacity.append(info.max_stops or 999)
+
+        if not active_drivers:
+            messages.warning(request, "No scheduled drivers available.")
+            return redirect("shipment_list")
+
+        qs = qs.order_by("id")[:50]
+
+        routes = optimize(qs, active_drivers, driver_time_limits, driver_capacity)
+        if not routes:
+            messages.warning(request, "No optimized routes generated.")
+            return redirect("shipment_list")
+
+        updated_shipments = []
+        history_logs = []
+
+        for driver_index, route_data in routes.items():
+            if driver_index >= len(active_drivers):
+                continue
+
+            driver = active_drivers[driver_index]
+            shipment_list = route_data.get("shipments", [])
+
+            for shipment in shipment_list:
+                if not shipment:
+                    continue
+
+                shipment.assigned_agent = driver
+                shipment.status = "Assigned to Driver"
+                updated_shipments.append(shipment)
+
+                history_logs.append(
+                    ShipmentHistory(
+                        shipment=shipment,
+                        status=shipment.status,
+                        department=shipment.department,
+                        assigned_agent=driver,
+                        changed_by=user,
+                        note="Auto-optimized route assignment"
+                    )
+                )
+
+        if updated_shipments:
+            Shipment.objects.bulk_update(updated_shipments, ["assigned_agent", "status"])
+            ShipmentHistory.objects.bulk_create(history_logs) # Added missing DB write
+
+        messages.success(
+            request, 
+            f"{len(updated_shipments)} shipment(s) optimized across {len(routes)} driver(s)."
+        )
+        return redirect("routes_diplay")
+
+
+# ====================================================== LOAD BALANCE NEW SHIPMENTS===========================================
+
+    elif action == "balance_new_shipments":
+        if not can_optimize:
+            messages.error(request, "Not allowed.")
+            return redirect("shipment_list")
+
+        new_shipments = list(qs)
+        if not new_shipments:
             messages.warning(request, "No shipments selected.")
             return redirect("shipment_list")
 
-        qs = Shipment.objects.filter(id__in=selected_ids)
-
-        # ================= REASSIGN =================
-        if action == "reassign":
-
-            update_data = {}
-
-            # department
-            if new_dept:
-                update_data["department_id"] = new_dept
-                update_data["assigned_agent"] = None
-
-            # status
-            if new_status:
-
-                if new_status.lower() == "cleared":
-
-                    update_data["status"] = "Ready for Delivery"
-
-                    operations_dept = Department.objects.filter(
-                        name__iexact="Operations"
-                    ).first()
-
-                    if operations_dept:
-                        update_data["department_id"] = operations_dept.id
-                    update_data["assigned_agent"] = None
-                else:
-                    update_data["status"] = new_status
-
-            # user
-            if bulk_user:
-                update_data["assigned_agent_id"] = bulk_user
-
-            if update_data:
-                updated_count = qs.update(**update_data)
-
-                messages.success(
-                    request,
-                    f"{updated_count} shipment(s) updated successfully."
-                )
-            else:
-                messages.warning(
-                    request,
-                    "No changes selected."
-                )
-
+        dept_ids = list(qs.values_list("department_id", flat=True).distinct())
+        if not dept_ids or None in dept_ids:
+            messages.error(request, "Cannot determine shipment department.")
             return redirect("shipment_list")
 
-        # ================= OPTIMIZE =================
-
-        # elif action == "optimize":
-
-        #     qs = qs.filter(status__iexact="Ready For Delivery")
-        #     drivers = list(AppUser.objects.filter(
-        #         groups__name="Driver",
-        #         is_active=True
-        #     ))
-
-        #     if not qs.exists():
-        #         messages.warning(request, "No eligible shipments for optimisation.")
-        #         return redirect("shipment_list")
-
-        #     routes = optimize(qs, drivers)
-
-        elif action == "optimize":
-
-    # =====================================================
-    # GET SHIPMENTS
-    # =====================================================
-            qs = qs.filter(
-                status__iexact="Ready For Delivery"
-            )
-
-            if not qs.exists():
-
-                messages.warning(
-                    request,
-                    "No eligible shipments for optimisation."
-                )
-
-                return redirect("shipment_list")
-
-            # =====================================================
-            # GET AVAILABLE DRIVERS
-            # =====================================================
-
-            drivers = list(
-
-                AppUser.objects.filter(
-                    groups__name="Driver",
-                    is_active=True
-                )
-
-            )
-
-            if not drivers:
-
-                messages.warning(
-                    request,
-                    "No drivers available."
-                )
-
-                return redirect("shipment_list")
-
-            # =====================================================
-            # GET DRIVER SCHEDULES
-            # =====================================================
-
-            today = date.today()
-
-            driver_infos = Driver_info.objects.filter(
-                date=today,
-                driver__in=drivers,
-                is_available=True
-            ).select_related("driver")
-
-            driver_map = {
-                d.driver_id: d
-                for d in driver_infos
-            }
-
-            # =====================================================
-            # DRIVER LIMITS + CAPACITY
-            # =====================================================
-
-            driver_time_limits = []
-
-            driver_capacity = []
-
-            active_drivers = []
-
-            for driver in drivers:
-
-                info = driver_map.get(driver.id)
-
-                # SKIP DRIVER WITHOUT SCHEDULE
-                if not info:
-                    continue
-
-                # -----------------------------
-                # SHIFT START/END
-                # -----------------------------
-
-                start_dt = datetime.combine(
-                    today,
-                    info.start_time
-                )
-
-                end_dt = datetime.combine(
-                    today,
-                    info.end_time
-                )
-
-                # NIGHT SHIFT SUPPORT
-                if end_dt < start_dt:
-                    end_dt += timedelta(days=1)
-
-                shift_seconds = int(
-                    (end_dt - start_dt).total_seconds()
-                )
-
-                # -----------------------------
-                # STORE DRIVER DATA
-                # -----------------------------
-
-                active_drivers.append(driver)
-
-                driver_time_limits.append(
-                    shift_seconds
-                )
-
-                driver_capacity.append(
-                    info.max_stops or 999
-                )
-
-            # =====================================================
-            # VALIDATION
-            # =====================================================
-
-            if not active_drivers:
-
-                messages.warning(
-                    request,
-                    "No scheduled drivers available."
-                )
-
-                return redirect("shipment_list")
-
-            # =====================================================
-            # RUN GOOGLE OPTIMIZER
-            # =====================================================
-
-            MAX_OPTIMIZE = 9
-
-            MAX_PER_RUN = 50
-
-            qs = qs.order_by("id")[:MAX_PER_RUN]
-
-            routes = optimize(
-                qs,
-                active_drivers,
-                driver_time_limits,
-                driver_capacity
-            )
-
-            # =====================================================
-            # NO ROUTES
-            # =====================================================
-
-            if not routes:
-
-                messages.warning(
-                    request,
-                    "No optimized routes generated."
-                )
-
-                return redirect("shipment_list")
-
-            # =====================================================
-            # ASSIGN SHIPMENTS
-            # =====================================================
-
-            updated_shipments = []
-
-            history_logs =[]
-
-            for driver_index, route_data in routes.items():
-
-                # SAFETY CHECK
-                if driver_index >= len(active_drivers):
-                    continue
-
-                driver = active_drivers[driver_index]
-
-                shipment_list = route_data.get(
-                    "shipments",
-                    []
-                )
-
-                for shipment in shipment_list:
-
-                    if not shipment:
-                        continue
-
-                    shipment.assigned_agent = driver
-
-                    shipment.status = "Assigned to Driver"
-
-                    updated_shipments.append(
-                        shipment
-                    )
-                    history_logs.append(
-                        ShipmentHistory(
-                            shipment=shipment,
-                            status=shipment.status,
-                            department=shipment.department,
-                            assigned_agent=driver,
-                            changed_by=request.user,
-                            note="Auto-optimized route assignment"
-                        )
-                )
-            # =====================================================
-            # BULK UPDATE
-            # =====================================================
-
-            if updated_shipments:
-
-                Shipment.objects.bulk_update(
-                    updated_shipments,
-                    [
-                        "assigned_agent",
-                        "status"
-                    ]
-                )
-
-            # =====================================================
-            # SUCCESS MESSAGE
-            # =====================================================
-
-            total_routes = len(routes)
-
-            total_shipments = len(updated_shipments)
-
-            messages.success(
-
-                request,
-
-                f"{total_shipments} shipment(s) "
-                f"optimized across "
-                f"{total_routes} driver(s)."
-
-            )
-
-            # =====================================================
-            # REDIRECT TO MAP
-            # =====================================================
-
-            return redirect("routes_diplay")
+        if len(dept_ids) > 1:
+            messages.error(request, "Please select shipments from one department only.")
+            return redirect("shipment_list")
+
+        dept_id = dept_ids[0]
+
+        users = list(AppUser.objects.filter(
+            is_active=True,
+            department_id=dept_id
+        ).exclude(
+            groups__name__iexact="Manager"
+        ).exclude(
+            groups__name__iexact="Driver"
+        ).exclude(
+            is_superuser=True
+        ).distinct())
+
+        if not users:
+            messages.warning(request, "No eligible users found in this department.")
+            return redirect("shipment_list")
+
+
+        user_counts = AppUser.objects.filter(id__in=[u.id for u in users]).annotate(
+            shipment_count=Count('assigned_shipments') 
+        )
+        user_load = {u.id: u.shipment_count for u in user_counts}
+
+      
+        updated = []
+        for shipment in new_shipments:
+            selected_user = min(users, key=lambda u: user_load.get(u.id, 0))
+            
+            shipment.assigned_agent = selected_user
+            shipment.status = "Assigned to User"
+            updated.append(shipment)
+
+            user_load[selected_user.id] += 1
+
+        Shipment.objects.bulk_update(updated, ["assigned_agent", "status"])
+
+        ShipmentHistory.objects.bulk_create([
+            ShipmentHistory(
+                shipment=s,
+                status=s.status,
+                department=s.department,
+                assigned_agent=s.assigned_agent,
+                changed_by=user,
+                note="Load-balanced shipment assignment"
+            ) for s in updated
+        ])
+
+        messages.success(request, f"{len(updated)} shipment(s) balanced across users.")
+        return redirect("shipment_list")
+
+    return redirect("shipment_list")

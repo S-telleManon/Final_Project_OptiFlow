@@ -4,274 +4,217 @@
 {% block page_title %}Shipment List{% endblock %}
 
 {% block content %}
+
 <div class="p-6">
 
-<!-- BULK ACTION BAR -->
+<!-- ================= BULK ACTIONS ================= -->
 <form method="POST" action="{% url 'bulk_action' %}" id="bulkForm">
     {% csrf_token %}
 
-    <div class="mb-4 flex gap-3 items-center flex-wrap">
+    <div class="mb-5 flex flex-wrap gap-3 items-center">
 
-        <select name="bulk_department"
-                class="border px-3 py-2 rounded">
-
-            <option value="">Bulk Change Department</option>
-
+        <select name="bulk_department" class="border px-3 py-2 rounded">
+            <option value="">Change Department</option>
             {% for dept in departments %}
-                <option value="{{ dept.id }}">
-                    {{ dept.name }}
-                </option>
+                <option value="{{ dept.id }}">{{ dept.name }}</option>
             {% endfor %}
-
         </select>
 
-        <select name="bulk_status"
-                class="border px-3 py-2 rounded">
-
-            <option value="">Bulk Change Status</option>
-
+        <select name="bulk_status" class="border px-3 py-2 rounded">
+            <option value="">Change Status</option>
             {% for s in statuses %}
-                <option value="{{ s }}">
-                    {{ s }}
-                </option>
+                <option value="{{ s }}">{{ s }}</option>
             {% endfor %}
-
         </select>
 
-        <select name="bulk_user"
-                class="border px-3 py-2 rounded">
-
-            <option value="">Bulk Agent Select</option>
-
+        <select name="bulk_user" class="border px-3 py-2 rounded">
+            <option value="">Assign Agent</option>
             {% for u in users %}
                 <option value="{{ u.id }}">
                     {{ u.first_name }} {{ u.last_name }}
                 </option>
             {% endfor %}
-
         </select>
 
-
-        <button type="submit"
-                name="action"
-                value="reassign"
-                class="bg-orange-600 text-white px-4 py-2 rounded hover:bg-blue-900">
-
-            🔄 Apply Bulk Changes
-
+        <button type="submit" name="action" value="reassign"
+                class="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700">
+            🔄 Apply Changes
         </button>
 
         {% if can_optimize %}
-        <button type="submit"
-                name="action"
-                value="optimize"
-                class="bg-purple-800 text-white px-4 py-2 rounded hover:bg-blue-900">
+            <button type="submit" name="action" value="optimize"
+                    class="bg-purple-800 text-white px-4 py-2 rounded hover:bg-purple-900">
+                🚚 Optimize Routes
+            </button>
 
-            🚚 Optimize Routes
-
-        </button>
-
+            <button type="submit" name="action" value="balance_new_shipments"
+                    class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                👤 Distribute Shipments
+            </button>
         {% endif %}
 
     </div>
+</form>
+
+<!-- ================= FILTERS ================= -->
+<form method="GET" class="mb-5 flex flex-wrap gap-3">
+
+    <input type="text"
+           name="tracking"
+           placeholder="Tracking Number"
+           value="{{ request.GET.tracking }}"
+           class="border px-3 py-2 rounded">
+
+    <input type="text"
+           name="client"
+           placeholder="Recipient / Client"
+           value="{{ request.GET.client }}"
+           class="border px-3 py-2 rounded">
+
+    <select name="status" class="border px-3 py-2 rounded">
+        <option value="">All Status</option>
+        {% for s in statuses %}
+            <option value="{{ s }}" {% if request.GET.status == s %}selected{% endif %}>
+                {{ s }}
+            </option>
+        {% endfor %}
+    </select>
+
+    <select name="agent" class="border px-3 py-2 rounded">
+        <option value="">All Agents</option>
+        {% for u in users %}
+            <option value="{{ u.id }}"
+                {% if request.GET.agent == u.id|stringformat:"s" %}selected{% endif %}>
+                {{ u.first_name }} {{ u.last_name }}
+            </option>
+        {% endfor %}
+    </select>
+
+    <select name="department" class="border px-3 py-2 rounded">
+        <option value="">All Departments</option>
+        {% for dept in departments %}
+            <option value="{{ dept.id }}"
+                {% if request.GET.department == dept.id|stringformat:"s" %}selected{% endif %}>
+                {{ dept.name }}
+            </option>
+        {% endfor %}
+    </select>
+
+    <button class="bg-purple-700 text-white px-4 py-2 rounded">
+        Filter
+    </button>
+
+    <a href="{% url 'shipment_list' %}"
+       class="bg-gray-500 text-white px-4 py-2 rounded">
+        Reset
+    </a>
 
 </form>
 
-
-
-<!-- TABLE -->
+<!-- ================= TABLE ================= -->
 <div class="bg-white shadow-lg rounded-xl overflow-hidden">
 
     <div class="overflow-x-auto">
 
         <table class="min-w-full divide-y divide-gray-200">
 
-
+            <!-- HEADER -->
             <thead class="bg-gray-100">
-
                 <tr>
-
-                    <th class="py-2 px-4 text-left">
+                    <th class="px-4 py-2 text-left">
                         <input type="checkbox" id="selectAll">
                     </th>
-
-                    <th class="py-2 px-4 text-left">
-                        Tracking No
-                    </th>
-
-                    <th class="py-2 px-4 text-left">
-                        MAWB
-                    </th>
-
-                    <th class="py-2 px-4 text-left">
-                        Shipper
-                    </th>
-
-                    <th class="py-2 px-4 text-left">
-                        Recipient
-                    </th>
-
-                    <th class="py-2 px-4 text-left">
-                        Department
-                    </th>
-
-                    <th class="py-2 px-4 text-left">
-                        Status
-                    </th>
-
-                    <th class="py-2 px-4 text-left">
-                        Agent Assigned
-                    </th>
-
-                    <th class="py-2 px-4 text-left">
-                        Actions
-                    </th>
-
+                    <th class="px-4 py-2 text-left">Tracking</th>
+                    <th class="px-4 py-2 text-left">MAWB</th>
+                    <th class="px-4 py-2 text-left">Shipper</th>
+                    <th class="px-4 py-2 text-left">Recipient</th>
+                    <th class="px-4 py-2 text-left">Department</th>
+                    <th class="px-4 py-2 text-left">Status</th>
+                    <th class="px-4 py-2 text-left">Agent</th>
+                    <th class="px-4 py-2 text-left">Actions</th>
                 </tr>
-
             </thead>
 
-
+            <!-- BODY -->
             <tbody class="bg-white divide-y divide-gray-200">
 
                 {% for shipment in shipments %}
 
                 <tr>
 
-                    <!-- BULK CHECKBOX -->
-                    <td class="py-2 px-4">
-
+                    <!-- BULK SELECT -->
+                    <td class="px-4 py-2">
                         <input type="checkbox"
                                form="bulkForm"
                                name="selected_shipments"
                                value="{{ shipment.id }}"
                                class="shipment-checkbox">
-
                     </td>
 
-                    <td class="py-2 px-4">{{ shipment.tracking_number }}</td>
-                    <td class="py-2 px-4">{{ shipment.master_airwaybill }}</td>
-                    <td class="py-2 px-4"> {{ shipment.shipper_name }}</td>
-                    <td class="py-2 px-4">{{ shipment.recipient_name }}</td>
+                    <td class="px-4 py-2">{{ shipment.tracking_number }}</td>
+                    <td class="px-4 py-2">{{ shipment.master_airwaybill }}</td>
+                    <td class="px-4 py-2">{{ shipment.shipper_name }}</td>
+                    <td class="px-4 py-2">{{ shipment.recipient_name }}</td>
 
-                    <!-- INLINE  FORM -->
-                    <form method="POST"
-                          action="{% url 'shipment_list' %}">
-
+                    <!-- INLINE EDIT FORM -->
+                    <form method="POST" action="{% url 'shipment_list' %}">
                         {% csrf_token %}
+                        <input type="hidden" name="shipment_id" value="{{ shipment.id }}">
 
-                        <input type="hidden"
-                               name="shipment_id"
-                               value="{{ shipment.id }}">
-
-<!------------------------------- DEPARTMENT -------------------->
-                        <td class="py-2 px-4">
-
-                            <select name="department"
-                                    class="border rounded px-2 py-1 text-sm w-full">
-
+                        <!-- DEPARTMENT -->
+                        <td class="px-4 py-2">
+                            <select name="department" class="border rounded px-2 py-1 w-full text-sm">
                                 {% for dept in departments %}
-
                                     <option value="{{ dept.id }}"
                                         {% if shipment.department == dept %}selected{% endif %}>
-
                                         {{ dept.name }}
-
                                     </option>
-
                                 {% endfor %}
-
                             </select>
-
                         </td>
-<!-----------------------------------------------------STATUS --------------->
-                        <td class="py-2 px-4">
 
-                            <select name="status"
-                                    class="border rounded px-2 py-1 text-sm w-full">
-
+                        <!-- STATUS -->
+                        <td class="px-4 py-2">
+                            <select name="status" class="border rounded px-2 py-1 w-full text-sm">
                                 {% for s in statuses %}
-
                                     <option value="{{ s }}"
                                         {% if shipment.status == s %}selected{% endif %}>
-
                                         {{ s }}
-
                                     </option>
-
                                 {% endfor %}
-
                             </select>
-
                         </td>
 
- <!-- AGENT------------------------- -->
-                        <td class="py-2 px-4">
-
+                        <!-- AGENT -->
+                        <td class="px-4 py-2">
                             {% if is_manager or is_admin %}
-
-                                <select name="assigned_agent"
-                                        class="border rounded px-2 py-1 text-sm w-full">
-
-                                    <option value="">
-                                        -- Select Agent --
-                                    </option>
-
+                                <select name="assigned_agent" class="border rounded px-2 py-1 w-full text-sm">
+                                    <option value="">-- Assign --</option>
                                     {% for u in users %}
-
                                         <option value="{{ u.id }}"
-                                            {% if shipment.assigned_agent and shipment.assigned_agent.id == u.id %}
-                                                selected
-                                            {% endif %}>
-
+                                            {% if shipment.assigned_agent and shipment.assigned_agent.id == u.id %}selected{% endif %}>
                                             {{ u.first_name }} {{ u.last_name }}
-
                                         </option>
-
                                     {% endfor %}
-
                                 </select>
-
                             {% else %}
-
-                                {% if shipment.assigned_agent %}
-
-                                    {{ shipment.assigned_agent.first_name }}
-                                    {{ shipment.assigned_agent.last_name }}
-
-                                {% else %}
-
-                                    Not assigned
-
-                                {% endif %}
-
+                                {{ shipment.assigned_agent.get_full_name|default:"Not assigned" }}
                             {% endif %}
-
                         </td>
 
                         <!-- ACTIONS -->
-                        <td class="py-2 px-4">
-
+                        <td class="px-4 py-2">
                             <div class="flex gap-2">
-
-                                <!-- SAVE -->
                                 <button type="submit"
-                                        class="bg-purple-800 text-white px-3 py-1 rounded hover:bg-purple-700 text-sm">
-
+                                        class="bg-purple-800 text-white px-3 py-1 rounded text-sm hover:bg-purple-700">
                                     Save
-
                                 </button>
 
-                                <!-- VIEW -->
                                 <a href="{% url 'shipment_details' shipment.id %}"
-                                   class="bg-orange-600 text-white px-3 py-1 rounded hover:bg-orange-600 text-sm">
-
-                                    View Details
-
+                                   class="bg-orange-600 text-white px-3 py-1 rounded text-sm hover:bg-orange-700">
+                                    View
                                 </a>
-
                             </div>
-
                         </td>
 
                     </form>
@@ -279,18 +222,11 @@
                 </tr>
 
                 {% empty %}
-
                 <tr>
-
-                    <td colspan="9"
-                        class="py-4 text-center text-gray-500">
-
+                    <td colspan="9" class="text-center py-4 text-gray-500">
                         No shipments found.
-
                     </td>
-
                 </tr>
-
                 {% endfor %}
 
             </tbody>
@@ -298,25 +234,17 @@
         </table>
 
     </div>
-
 </div>
 
 </div>
 
-
-<!-- SELECT ALL SCRIPT -->
+<!-- ================= SCRIPT ================= -->
 <script>
-
 document.getElementById("selectAll").addEventListener("change", function () {
-
-    let checkboxes = document.querySelectorAll(".shipment-checkbox");
-
-    checkboxes.forEach(cb => {
+    document.querySelectorAll(".shipment-checkbox").forEach(cb => {
         cb.checked = this.checked;
     });
-
 });
-
 </script>
 
 {% endblock %}

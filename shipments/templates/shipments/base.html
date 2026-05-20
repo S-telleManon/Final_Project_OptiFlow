@@ -72,17 +72,22 @@
                 📦 <span x-show="open">Shipments</span>
             </a>
 
-            <a href="{% url 'routes_diplay' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900 text-lg">
-                🚚 <span x-show="open">Routes</span>
-            </a>
-            <a href="{% url 'driver_schedule' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900">
+            
+                <a href="{% url 'routes_diplay' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900 text-lg">
+                    🚚 <span x-show="open">Routes</span>
+                </a>
+
+            {% if request.user.is_superuser or request.user.department.name == "Operations" %}
+            <a href="{% url 'driver_schedule' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900 text-lg">
                 🕒 <span x-show="open">Driver Schedule</span>
             </a>
+            {% endif %}
 
+            {% if request.user.is_superuser%}
             <a href="{% url 'users_list' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900 text-lg">
                 🧑‍💼 <span x-show="open">Users</span>
             </a>
-
+            {% endif %}
         </nav>
     </aside>
 

@@ -5,18 +5,16 @@ from django.contrib.auth.decorators import permission_required,login_required
 from django.shortcuts import render, redirect , get_object_or_404
 from django.contrib import messages
 from ..models import Shipment, Driver_info
-import googlemaps
-import numpy as np
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from django.conf import settings
 from datetime import datetime,date,timedelta
+from sklearn.cluster import KMeans
+from django.core.serializers.json import DjangoJSONEncoder
 
+# FedEx Warehouse location - using the settings.py inserted lat/lon 
 WAREHOUSE_OPS = (settings.WAREHOUSE_LAT, settings.WAREHOUSE_LON)
 
-
-# ----------------------------
-# GOOGLE MATRIX (TIME)
-# ----------------------------
+# using googlemaps - Distance Matrix Api(travel time between points) and Directions API(polyline for maps route display)
 def build_time_matrix(gmaps, coords):
     size = len(coords)
     matrix = [[0] * size for _ in range(size)]
@@ -42,10 +40,7 @@ def build_time_matrix(gmaps, coords):
     return matrix
 
 
-# # ----------------------------
-# # MAIN VRP OPTIMIZER
-# # ----------------------------
-
+# Trying another way to calculate dictance from warehouse and next locations using route nearest neighbour 
 # def depot_distance(coord):
 #     depot_lat, depot_lon = WAREHOUSE_OPS
 #     lat, lon = coord
@@ -234,8 +229,11 @@ def build_time_matrix(gmaps, coords):
 #         }
 
 #     return routes
-from sklearn.cluster import KMeans
-import numpy as np
+
+
+
+# --------------------------------------------clustering shipments based on geo----------------------------------------------------------------------
+#Using Kmeans - split in region
 
 def cluster_shipments(shipments, num_drivers):
     coords = np.array([
@@ -252,6 +250,7 @@ def cluster_shipments(shipments, num_drivers):
 
     return clusters
 
+# --------------------------------------------Optmise functions using shipments address capacity and time limits ---------------------------
 def optimize(shipments, drivers, driver_time_limits, driver_capacity):
 
     gmaps = googlemaps.Client(key=settings.GOOGLE_MAPS_KEY)
@@ -299,7 +298,7 @@ def optimize(shipments, drivers, driver_time_limits, driver_capacity):
             "Time"
         )
 
-        # capacity
+        # -----------------------capacity
         def demand_cb(from_index):
             return 0 if manager.IndexToNode(from_index) == 0 else 1
 
@@ -323,7 +322,6 @@ def optimize(shipments, drivers, driver_time_limits, driver_capacity):
         if not solution:
             continue
 
-        # build route in solver order ONLY
         index = routing.Start(0)
         route_shipments = []
 
@@ -333,7 +331,6 @@ def optimize(shipments, drivers, driver_time_limits, driver_capacity):
                 route_shipments.append(cluster_shipments_list[node - 1])
             index = solution.Value(routing.NextVar(index))
 
-        # IMPORTANT: NO nearest neighbor reorder
 
         route_coords = [WAREHOUSE_OPS] + [
             (s.latitude, s.longitude) for s in route_shipments
@@ -369,7 +366,7 @@ def run_optimizer(request):
         messages.warning(request, "No shipments available for processing.")
         return redirect("shipment_list")
 
-#DRIVER SCHEDULES NOW INCLUDES THE STATUS OF ACTIVE USER ONLY 
+#-------------------including available drivers---------------- 
     driver_infos = Driver_info.objects.filter(
         date=date.today(),
         is_available=True,
@@ -383,29 +380,11 @@ def run_optimizer(request):
 
     drivers = [info.driver for info in driver_infos]
 
-#CLACULATING THE DRIVER LIMITS
     today = date.today()
-
-    # driver_limits = []
-
-    # for info in driver_infos:
-
-    #     start_dt = datetime.combine(today, info.start_time)
-    #     end_dt = datetime.combine(today, info.end_time)
-
-    #     if end_dt < start_dt:
-    #         end_dt += timedelta(days=1)
-
-    #     shift_seconds = int((end_dt - start_dt).total_seconds())
-    #     driver_limits.append(
-    #     int((end_dt - start_dt).total_seconds())
-    # )
     driver_time_limits = []
     driver_capacity = []
 
     for info in driver_infos:
-
-        # SHIFT TIME (seconds)
         start_dt = datetime.combine(today, info.start_time)
         end_dt = datetime.combine(today, info.end_time)
 
@@ -415,11 +394,9 @@ def run_optimizer(request):
         driver_time_limits.append(
             int((end_dt - start_dt).total_seconds())
         )
-
-        # MAX STOPS (CAPACITY)
         driver_capacity.append(info.max_stops)
 
-#RUNNING THE OPTIMISER WITH ALL THE INFORMATION - DRIVERS AND DRIVERS LIMITS 
+# running the optimiser 
     routes = optimize(
     shipments=shipments,
     drivers=drivers,
@@ -488,50 +465,40 @@ def run_optimizer(request):
 
         routes_data.append({
 
-            # DRIVER INFO
+            # ---------------DRIVER INFO
             "driver_name": driver.get_full_name() or driver.username,
             "driver_id": driver.id,
 
-            # SCHEDULE
+            #----------------- SCHEDULE
             "start_time": schedule.start_time.strftime("%H:%M"),
             "end_time": schedule.end_time.strftime("%H:%M"),
             "departure_time": schedule.start_time.strftime("%H:%M"),
 
-            # ROUTE INFO
+            # -----------------ROUTE INFO
             "max_stops": schedule.max_stops,
             "duration_minutes": round(duration / 60, 1),
             "count": len(shipment_list),
 
-            # MAP COLOR
+            # -----------------MAP COLOR
             "color": colors[driver_index % len(colors)],
             "polyline": route_data.get("polyline"),
-            # DELIVERY STOPS
+            # --------------DELIVERY STOPS
             "route": [
                 {
-                    # STOP ORDER
+                    -
                     "sequence": idx + 1,
-
-                    # LOCATION
                     "lat": s.latitude,
                     "lng": s.longitude,
-
-                    # DELIVERY INFO
                     "tracking_number": s.tracking_number,
                     "recipient": s.recipient_name,
                     "address": s.address,
-
-                    # ETA ESTIMATION
                     "eta": (
                         datetime.combine(date.today(), schedule.start_time)
                         + timedelta(minutes=(idx * 15))
                     ).strftime("%H:%M"),
-
-                    # LABEL
                     "label":
                         f"{s.tracking_number} - "
                         f"{s.recipient_name}",
-
-                    # COLOR
                     "color":
                         colors[driver_index % len(colors)],
                 }
