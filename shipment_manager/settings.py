@@ -127,14 +127,13 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-# This safe layout checks if your root static folder exists before mapping it
-if os.path.exists(os.path.join(BASE_DIR, 'static')):
-    STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
-else:
-    STATICFILES_DIRS = []
+# This tells Django where your source files live
+STATICFILES_DIRS = [
+    BASE_DIR / "shipments" / "static"
+]
 
-# This tells Vercel exactly where to output the final bundle
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles_build', 'static')
+# This is the exact destination Vercel expects to find
+STATIC_ROOT = BASE_DIR / 'staticfiles_build' / 'static'
 
 LOGIN_URL = '/shipments/login/'  
 LOGIN_REDIRECT_URL = '/shipments/list/'  
