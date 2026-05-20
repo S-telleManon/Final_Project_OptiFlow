@@ -126,7 +126,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [BASE_DIR / "static"]
+
+# This safe layout checks if your root static folder exists before mapping it
+if os.path.exists(os.path.join(BASE_DIR, 'static')):
+    STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+else:
+    STATICFILES_DIRS = []
+
+# This tells Vercel exactly where to output the final bundle
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles_build', 'static')
 
 LOGIN_URL = '/shipments/login/'  
