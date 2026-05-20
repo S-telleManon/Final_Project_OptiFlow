@@ -1,12 +1,12 @@
 {
   "version": 2,
+  "framework": null,
   "builds": [
     {
-      "src": "manage.py",
+      "src": "shipment_manager/wsgi.py",
       "use": "@vercel/python"
     }
   ],
-  "buildCommand": "python manage.py collectstatic --noinput",
   "routes": [
     {
       "src": "/(.*)",
