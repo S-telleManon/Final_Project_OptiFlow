@@ -325,6 +325,7 @@ def shipment_list(request):
             if new_department and shipment.department != new_department:
                 shipment.department = new_department
                 department_changed = True
+                shipment.status = "Unassign"
 
         # ------ Updating Status ----
         status = request.POST.get("status")
