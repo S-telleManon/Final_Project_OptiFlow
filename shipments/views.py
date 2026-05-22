@@ -604,12 +604,21 @@ def bulk_action(request):
 #=============================================== OPTIMIZE ROUTES======================
 
     elif action == "optimize":
-        qs = qs.filter(status__iexact="Ready For Delivery")
+        qs = qs.filter(status__iexact="Ready for Delivery")
         if not qs.exists():
             messages.warning(request, "No eligible shipments for optimisation.")
             return redirect("shipment_list")
 
-        drivers = list(AppUser.objects.filter(groups__name="Driver", is_active=True))
+        # drivers = list(AppUser.objects.filter(groups__name="Driver", is_active=True))
+        drivers = list(
+            AppUser.objects.filter(
+                groups__name="Driver",
+                is_active=True
+            ).distinct()
+        )
+        print("TODAY:", today)
+        print("DRIVERS:", drivers)
+        print("DRIVER INFOS:", list(driver_infos))
         if not drivers:
             messages.warning(request, "No drivers available.")
             return redirect("shipment_list")
