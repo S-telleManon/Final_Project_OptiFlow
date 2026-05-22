@@ -617,7 +617,7 @@ def bulk_action(request):
             ).distinct()
         )
         print("DRIVERS:", drivers)
-        print("DRIVER INFOS:", list(driver_infos))
+
         if not drivers:
             messages.warning(request, "No drivers available.")
             return redirect("shipment_list")
