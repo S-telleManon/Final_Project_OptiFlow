@@ -340,20 +340,19 @@ def shipment_list(request):
                 shipment.status = status
 
         # ------ Handling Agent Assignments 
-        if is_manager or is_admin:
-            
-            agent_id = request.POST.get("assigned_agent")
-            if agent_id:
-                shipment.assigned_agent_id = agent_id
-            else:
-                shipment.assigned_agent = None
-        else:
-            
             if department_changed:
-                shipment.assigned_agent = None          
-                shipment.status = "Unassign"    
+                shipment.assigned_agent = None
+                shipment.status = "Unassign"
 
-        shipment.save()
+            elif is_manager or is_admin:
+
+                agent_id = request.POST.get("assigned_agent")
+
+                if agent_id:
+                    shipment.assigned_agent_id = agent_id
+                else:
+                    shipment.assigned_agent = None
+                    shipment.save()
         
         
         ShipmentHistory.objects.create(
