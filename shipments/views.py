@@ -404,7 +404,7 @@ def shipment_list(request):
     # Context items for UI population
     departments = Department.objects.all()
     users = AppUser.objects.all()
-    statuses = ['Uploaded', 'In Progress', 'Cleared', 'Ready for Delivery', 'Assigned to Driver', 'Out for Delivery', 'Assigned to User']
+    statuses = ['Uploaded', 'In Progress', 'Cleared', 'Ready for Delivery', 'Assigned to Driver', 'Out for Delivery', 'Assigned to User','Unassign']
 
     return render(request, "shipments/shipment_list.html", {
         "shipments": shipments,
@@ -576,6 +576,7 @@ def bulk_action(request):
 
         if new_dept:
             update_data["department_id"] = new_dept
+            update_data["status"] = "Unassign"
             update_data["assigned_agent"] = None
 
         if new_status:
