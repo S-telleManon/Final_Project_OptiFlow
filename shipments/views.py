@@ -616,7 +616,6 @@ def bulk_action(request):
                 is_active=True
             ).distinct()
         )
-        print("TODAY:", today)
         print("DRIVERS:", drivers)
         print("DRIVER INFOS:", list(driver_infos))
         if not drivers:
