@@ -298,9 +298,6 @@ def shipment_list(request):
         shipment_id = request.POST.get("shipment_id")
         shipment = get_object_or_404(Shipment, id=shipment_id)
 
-        # -------------------------------------------------------------------------
-        # STEP 1: PERMISSION VALIDATION
-        # -------------------------------------------------------------------------
         has_modify_permission = False
 
         if is_admin:
@@ -318,9 +315,7 @@ def shipment_list(request):
             messages.error(request, "Access Denied: You do not have permission to modify this shipment.")
             return redirect("shipment_list")
 
-        # -------------------------------------------------------------------------
-        # STEP 2: PROCESS UPDATES (HAND-OFF LOGIC)
-        # -------------------------------------------------------------------------
+ 
         department_changed = False
 
         # ------ Updating Department ----
@@ -343,23 +338,23 @@ def shipment_list(request):
             else:
                 shipment.status = status
 
-        # ------ Handling Agent Assignments & Hand-offs ----
+        # ------ Handling Agent Assignments 
         if is_manager or is_admin:
-            # Managers can explicitly assign or clear agents within their department view
+            
             agent_id = request.POST.get("assigned_agent")
             if agent_id:
                 shipment.assigned_agent_id = agent_id
             else:
                 shipment.assigned_agent = None
         else:
-            # It's a Regular User (Agent). If they shifted the department away:
+            
             if department_changed:
-                shipment.assigned_agent = None          # Clear out the assignment
-                shipment.status = "Assigned to User"    # Update status per requirement
+                shipment.assigned_agent = None          
+                shipment.status = "Unassign"    
 
         shipment.save()
         
-        # Save History Audit trail
+        
         ShipmentHistory.objects.create(
             shipment=shipment,
             status=shipment.status,
@@ -401,7 +396,7 @@ def shipment_list(request):
         shipments = shipments.filter(assigned_agent_id=agent_filter)
     if department_filter:
         shipments = shipments.filter(department_id=department_filter)
-    # Context items for UI population
+   
     departments = Department.objects.all()
     users = AppUser.objects.all()
     statuses = ['Uploaded', 'In Progress', 'Cleared', 'Ready for Delivery', 'Assigned to Driver', 'Out for Delivery', 'Assigned to User','Unassign']
@@ -641,7 +636,7 @@ def bulk_action(request):
             if not info:
                 continue  
 
-            # Calculate shift durations
+            
             start_dt = datetime.combine(today, info.start_time)
             end_dt = datetime.combine(today, info.end_time)
             
@@ -696,7 +691,7 @@ def bulk_action(request):
 
         if updated_shipments:
             Shipment.objects.bulk_update(updated_shipments, ["assigned_agent", "status"])
-            ShipmentHistory.objects.bulk_create(history_logs) # Added missing DB write
+            ShipmentHistory.objects.bulk_create(history_logs) 
 
         messages.success(
             request, 
