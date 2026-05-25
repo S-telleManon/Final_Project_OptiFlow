@@ -65,7 +65,7 @@
 
 </div>
 {% else %}
-<!-- For regular users, only show their own shipment status -->
+<!-- For staff users, only show their own shipment status not those of the whole dept  -->
 <div class="bg-white p-6 rounded-xl shadow-lg md:w-1/2 mx-auto mt-6 mb-6 flex justify-center items-center">
     <div class="text-center w-full max-w-md">
         <h3 class="text-lg font-semibold mb-4">Your Shipment Status</h3>
@@ -74,7 +74,7 @@
 </div>
 {% endif %}
 
-<!-- SUMMARY CARDS -->
+<!-- SUMMARY CARDS - removed as it was distort upon changing view between users and managers and admin-->
 <!-- <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
     <div class="bg-white p-4 rounded-xl shadow hover:scale-105 transition text-center">
         <h2 class="text-black">Total Shipments</h2>
@@ -94,18 +94,15 @@
 
 <!-- CHART JS -->
 <script>
-    // Register the datalabels plugin globally so it hooks into Chart.js
-    Chart.register(ChartDataLabels);
 
-    // Shared configuration for rendering the data numbers nicely over the text blocks
+    Chart.register(ChartDataLabels);
     const datalabelOptions = {
-        color: '#ffffff', // White numbers stand out great on dark/vibrant slices
+        color: '#ffffff', // white on darker colors
         font: {
             weight: 'bold',
             size: 14
         },
         formatter: (value) => {
-            // Only display the slice number if it's greater than 0
             return value > 0 ? value : '';
         }
     };
@@ -150,7 +147,7 @@
     });
     {% endif %}
 </script>
-
+<!-- on dashboard - viewing of the real time and date - just for deco  -->
 <script>
     function updateDateTime() {
         const now = new Date();

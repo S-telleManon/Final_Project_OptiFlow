@@ -4,14 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <title>{% block title %}Dashboard{% endblock %}</title>
-
-    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Alpine.js -->
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-
-    <!-- Chart.js (optional for pages that need it) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
@@ -44,20 +38,16 @@
 
 <div class="flex h-screen">
 
-    <!-- SIDEBAR -->
+    <!-------------------- SIDEBAR ------------------------->
     <aside :class="open ? 'w-64' : 'w-20'" 
        class="bg-gradient-to-r from-white-600 to-purple-600 p-2 transition-all duration-300 shadow">
-
-        <!-- TOGGLE -->
         <button @click="open = !open" class="mb-6 text-xl">☰</button>
-
-        <!-- TITLE -->
         <h2 x-show="open" x-transition 
             class="text-3xl font-bold mb-8 text-gray-900 text-center">
             OptiFlow 🌀
         </h2>
 
-        <!-- MENU -->
+        <!------------------ MENU=------------------->
         <nav class="space-y-4">
 
             <a href="{% url 'dashboard' %}" class="block p-2 rounded hover:bg-gray-200 font-bold text-gray-900 text-lg">
@@ -142,7 +132,7 @@
         </header>
                <!-- CONTENT -->
 
-        <main class="p-4 space-y-4 overflow-y-auto pt-8"> <!-- padding-top = header height -->
+        <main class="p-4 space-y-4 overflow-y-auto pt-8">
             {% block content %}{% endblock %}
         </main>
 

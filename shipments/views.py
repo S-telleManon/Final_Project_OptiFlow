@@ -18,6 +18,8 @@ from django.http import JsonResponse
 from django.core.serializers.json import DjangoJSONEncoder
 from django.shortcuts import render, redirect
 import csv
+from django.contrib.auth.hashers import make_password
+
 
 
 
@@ -88,16 +90,14 @@ def add_department(request):
 # -------------------------------------------CRUD FOR USERS------------------------------------------------------------------------------
 #--------------CREATE USER
 
-def create_user(request):
-    form = AppUserForm(request.POST or None)
-    departments = Department.objects.all()
-    groups = Group.objects.all()
+# def create_user(request):
+#     form = AppUserForm(request.POST or None)
+#     departments = Department.objects.all()
+#     groups = Group.objects.all()
 
-    operations_dept = Department.objects.filter(name__iexact="Operations").first()
-    operations_dept_id = operations_dept.id if operations_dept else None
+#     operations_dept = Department.objects.filter(name__iexact="Operations").first()
+#     operations_dept_id = operations_dept.id if operations_dept else None
 
-from django.contrib.auth.models import Group
-from django.contrib.auth.hashers import make_password
 
 def create_user(request):
     form = AppUserForm(request.POST or None)
@@ -307,7 +307,7 @@ def shipment_list(request):
             if shipment.department == user.department:
                 has_modify_permission = True
         else:
-            # Regular agents can only edit files directly assigned to them
+            # Staff can only edit files directly assigned to them
             if shipment.assigned_agent == user:
                 has_modify_permission = True
 

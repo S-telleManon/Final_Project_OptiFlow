@@ -14,7 +14,6 @@
         <form method="POST" class="space-y-4">
             {% csrf_token %}
 
-            <!-- Username -->
             <div>
                 <label for="id_username" class="block text-sm font-medium mb-1">Username</label>
                 <input type="text" name="username" id="id_username"
@@ -23,7 +22,7 @@
                        class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-purple-400">
             </div>
 
-            <!-- Password (only show on creation or if changing) -->
+            <!-- Password----only show on creation or if changing -->
             {% if not editing %}
             <div>
                 <label for="id_password" class="block text-sm font-medium mb-1">Password</label>
@@ -116,14 +115,14 @@
                 </select>
             </div>
 
-                <!-- Zone visible only if department is Operations -->
+                <!-- Zone visible only if department is Operations - removed since no zones used afterwars
                 <div x-show="dept == '{{ operations_dept_id }}'" class="mt-2">
                     <label for="id_zone" class="block text-sm font-medium mb-1">Zone (Optional)</label>
                     <input type="text" name="zone" id="id_zone"
                            value="{{ form.zone.value|default_if_none:'' }}"
                            placeholder="Zone for Operations"
                            class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-purple-400">
-                </div>
+                </div> -->
             </div>
 
             <!-- Submit Button -->

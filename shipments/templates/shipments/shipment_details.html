@@ -13,12 +13,12 @@
     <!-- ================= LEFT PANEL ================= -->
     <div class="col-span-2 bg-white A021 Nbc RC p-6 rounded-xl shadow">
 
-        <!-- HEADER -->
+        
         <h2 class="text-xl font-bold mb-5">
             📦 Tracking #{{ shipment.tracking_number }}
         </h2>
 
-        <!-- BASIC INFO -->
+        
         <div class="grid grid-cols-2 gap-4 text-sm">
             <p><span class="font-semibold">Status:</span> {{ shipment.status }}</p>
             <p><span class="font-semibold">Category:</span> {{ shipment.category }}</p>
@@ -136,7 +136,6 @@
 
 </div>
 
-<!-- ================= SCRIPTS ================= -->
 <script>
 function toggleHistory() {
     const box = document.getElementById("historyBox");
@@ -148,7 +147,7 @@ function toggleHistory() {
     arrow.textContent = isHidden ? "▲" : "▼";
 }
 
-// MAP
+
 const lat = {{ shipment.latitude|default:"null" }};
 const lng = {{ shipment.longitude|default:"null" }};
 

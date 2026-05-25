@@ -118,7 +118,6 @@
 
         <table class="min-w-full divide-y divide-gray-200">
 
-            <!-- HEADER -->
             <thead class="bg-gray-100">
                 <tr>
                     <th class="px-4 py-2 text-left">
@@ -135,14 +134,12 @@
                 </tr>
             </thead>
 
-            <!-- BODY -->
             <tbody class="bg-white divide-y divide-gray-200">
 
                 {% for shipment in shipments %}
 
                 <tr>
 
-                    <!-- BULK SELECT -->
                     <td class="px-4 py-2">
                         <input type="checkbox"
                                form="bulkForm"
@@ -156,12 +153,11 @@
                     <td class="px-4 py-2">{{ shipment.shipper_name }}</td>
                     <td class="px-4 py-2">{{ shipment.recipient_name }}</td>
 
-                    <!-- INLINE EDIT FORM -->
                     <form method="POST" action="{% url 'shipment_list' %}">
                         {% csrf_token %}
                         <input type="hidden" name="shipment_id" value="{{ shipment.id }}">
 
-                        <!-- DEPARTMENT -->
+
                         <td class="px-4 py-2">
                             <select name="department" class="border rounded px-2 py-1 w-full text-sm">
                                 {% for dept in departments %}
@@ -173,7 +169,7 @@
                             </select>
                         </td>
 
-                        <!-- STATUS -->
+
                         <td class="px-4 py-2">
                             <select name="status" class="border rounded px-2 py-1 w-full text-sm">
                                 {% for s in statuses %}
@@ -185,7 +181,6 @@
                             </select>
                         </td>
 
-                        <!-- AGENT -->
                         <td class="px-4 py-2">
                             {% if is_manager or is_admin %}
                                 <select name="assigned_agent" class="border rounded px-2 py-1 w-full text-sm">
@@ -202,7 +197,6 @@
                             {% endif %}
                         </td>
 
-                        <!-- ACTIONS -->
                         <td class="px-4 py-2">
                             <div class="flex gap-2">
                                 <button type="submit"
@@ -238,7 +232,7 @@
 
 </div>
 
-<!-- ================= SCRIPT ================= -->
+
 <script>
 document.getElementById("selectAll").addEventListener("change", function () {
     document.querySelectorAll(".shipment-checkbox").forEach(cb => {

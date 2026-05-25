@@ -26,7 +26,7 @@
                         <th class="py-2 px-4 text-center">Last Name</th>
                         <th class="py-2 px-4 text-center">Department</th>
                         <th class="py-2 px-4 text-center">Role</th>
-                        <th class="py-2 px-4 text-center">Zone</th>
+                        <!-- <th class="py-2 px-4 text-center">Zone</th> -->
                         <th class="py-2 px-4 text-center">Actions</th>
                     </tr>
                 </thead>
@@ -47,7 +47,7 @@
                                 User
                             {% endif %}
                         </td>
-                        <td class="py-2 px-4 text-center">{{ user.zone }}</td>
+                        <!-- <td class="py-2 px-4 text-center">{{ user.zone }}</td> -->
                         <td class="py-2 px-4 text-center">
                             <div class="flex justify-center gap-2">
                                 <a href="{% url 'edit_user' user.id %}" 
