@@ -95,7 +95,8 @@ class Driver_info(models.Model):
     is_available = models.BooleanField(default=True)
 
     max_stops = models.IntegerField(default=25)
-
+    route_polyline = models.TextField(null=True, blank=True)
+    route_duration_seconds = models.IntegerField(null=True, blank=True)
 
 class ShipmentHistory(models.Model):
 

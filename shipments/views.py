@@ -505,41 +505,70 @@ def driver_schedule_view(request):
 @login_required
 def routes_page(request):
 
-    drivers = AppUser.objects.filter(groups__name="Driver")
+    today = date.today()
+
+    driver_infos = (
+        Driver_info.objects.filter(date=today)
+        .select_related("driver")
+        .order_by("driver_id")
+    )
 
     colors = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"]
 
     routes_data = []
 
-    for i, d in enumerate(drivers):
+    for i, info in enumerate(driver_infos):
 
-        shipments = Shipment.objects.filter(
-            assigned_agent=d,
-            latitude__isnull=False,
-            longitude__isnull=False
+        d = info.driver
+
+        shipments = (
+            Shipment.objects.filter(
+                assigned_agent=d,
+                latitude__isnull=False,
+                longitude__isnull=False,
+            )
+            .order_by("delivery_sequence")
         )
+
+        if not shipments.exists():
+            continue  # skip drivers with nothing assigned today
 
         routes_data.append({
             "driver_name": d.get_full_name() or d.username,
+            "driver_id": d.id,
             "count": shipments.count(),
             "color": colors[i % len(colors)],
 
+           
+            "duration_minutes": round((info.route_duration_seconds or 0) / 60, 1),
+            "polyline": info.route_polyline,
+            "start_time": info.start_time.strftime("%H:%M"),
+            "end_time": info.end_time.strftime("%H:%M"),
+            "max_stops": info.max_stops,
+
             "route": [
                 {
+                    "sequence": s.delivery_sequence,
                     "lat": s.latitude,
                     "lng": s.longitude,
                     "tracking_number": s.tracking_number,
                     "recipient_name": s.recipient_name,
                     "address": s.recipient_address,
-                    "label": f"{s.tracking_number} - {s.recipient_name}"
+                    "label": f"{s.tracking_number} - {s.recipient_name}",
+                    "color": colors[i % len(colors)],
                 }
                 for s in shipments
             ]
         })
 
+
+    routes_data_json = json.dumps(routes_data, cls=DjangoJSONEncoder)
+
     return render(request, "shipments/routes.html", {
-        "routes_data_json": routes_data 
-})
+        "routes_data": routes_data,
+        "routes_data_json": routes_data_json,
+    })
+
 # -------------------------------------------Bulk Action ------------------------------------------------------------------------------
 
 def bulk_action(request):
@@ -604,14 +633,12 @@ def bulk_action(request):
             messages.warning(request, "No eligible shipments for optimisation.")
             return redirect("shipment_list")
 
-        # drivers = list(AppUser.objects.filter(groups__name="Driver", is_active=True))
         drivers = list(
             AppUser.objects.filter(
                 groups__name="Driver",
                 is_active=True
             ).distinct()
         )
-        print("DRIVERS:", drivers)
 
         if not drivers:
             messages.warning(request, "No drivers available.")
@@ -620,32 +647,33 @@ def bulk_action(request):
         # Fetch driver shifts for today
         today = date.today()
         driver_infos = Driver_info.objects.filter(
-            date=today, 
-            driver__in=drivers, 
+            date=today,
+            driver__in=drivers,
             is_available=True
         ).select_related("driver")
-        
+
         driver_map = {d.driver_id: d for d in driver_infos}
 
         driver_time_limits = []
         driver_capacity = []
         active_drivers = []
+        active_driver_infos = []  # NEW: keep Driver_info rows aligned with active_drivers
 
         for driver in drivers:
             info = driver_map.get(driver.id)
             if not info:
-                continue  
+                continue
 
-            
             start_dt = datetime.combine(today, info.start_time)
             end_dt = datetime.combine(today, info.end_time)
-            
+
             if end_dt < start_dt:  # Overnight shift fallback
                 end_dt += timedelta(days=1)
 
             shift_seconds = int((end_dt - start_dt).total_seconds())
 
             active_drivers.append(driver)
+            active_driver_infos.append(info)
             driver_time_limits.append(shift_seconds)
             driver_capacity.append(info.max_stops or 999)
 
@@ -655,13 +683,19 @@ def bulk_action(request):
 
         qs = qs.order_by("id")[:50]
 
-        routes = optimize(qs, active_drivers, driver_time_limits, driver_capacity)
+        routes, dropped_shipments = optimize(
+            qs,
+            active_drivers,
+            driver_time_limits,
+            driver_capacity
+        )
         if not routes:
             messages.warning(request, "No optimized routes generated.")
             return redirect("shipment_list")
 
         updated_shipments = []
         history_logs = []
+        infos_to_update = []  # NEW: Driver_info rows that need polyline/duration saved
 
         for driver_index, route_data in routes.items():
             if driver_index >= len(active_drivers):
@@ -670,12 +704,15 @@ def bulk_action(request):
             driver = active_drivers[driver_index]
             shipment_list = route_data.get("shipments", [])
 
-            for shipment in shipment_list:
+            # NEW: persist delivery_sequence - routes_page needs this to
+            # display stops in solver order instead of raw DB order
+            for seq, shipment in enumerate(shipment_list, start=1):
                 if not shipment:
                     continue
 
                 shipment.assigned_agent = driver
                 shipment.status = "Assigned to Driver"
+                shipment.delivery_sequence = seq
                 updated_shipments.append(shipment)
 
                 history_logs.append(
@@ -689,14 +726,36 @@ def bulk_action(request):
                     )
                 )
 
-        if updated_shipments:
-            Shipment.objects.bulk_update(updated_shipments, ["assigned_agent", "status"])
-            ShipmentHistory.objects.bulk_create(history_logs) 
+            # NEW: stash polyline + duration on this driver's Driver_info row
+            info = active_driver_infos[driver_index]
+            info.route_polyline = route_data.get("polyline")
+            info.route_duration_seconds = route_data.get("duration")
+            infos_to_update.append(info)
 
-        messages.success(
-            request, 
-            f"{len(updated_shipments)} shipment(s) optimized across {len(routes)} driver(s)."
-        )
+        if updated_shipments:
+            Shipment.objects.bulk_update(
+                updated_shipments,
+                ["assigned_agent", "status", "delivery_sequence"]  # NEW: include delivery_sequence
+            )
+            ShipmentHistory.objects.bulk_create(history_logs)
+
+        if infos_to_update:  # NEW
+            Driver_info.objects.bulk_update(
+                infos_to_update,
+                ["route_polyline", "route_duration_seconds"]
+            )
+
+        success_msg = f"{len(updated_shipments)} shipment(s) optimized across {len(routes)} driver(s)."
+        if dropped_shipments:  # NEW: surface dropped shipments here too
+            success_msg += (
+                f" {len(dropped_shipments)} shipment(s) could not be scheduled "
+                f"(over capacity or no shift could reach them): "
+                + ", ".join(s.tracking_number for s in dropped_shipments)
+            )
+            messages.warning(request, success_msg)
+        else:
+            messages.success(request, success_msg)
+
         return redirect("routes_diplay")
 
 

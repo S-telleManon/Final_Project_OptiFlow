@@ -135,6 +135,9 @@ data.forEach((driver, idx) => {
                         <div class="text-xs text-gray-500">
                             ${s.address || ""}
                         </div>
+                        <div class="text-xs text-blue-600 font-semibold mt-1">
+                            ⏰ ETA: ${s.eta || "--:--"}
+                        </div>
                     </div>
                 `).join("")}
 
@@ -146,13 +149,13 @@ data.forEach((driver, idx) => {
     // --- markers ---
     const markers = [];
     const coords = [];
-
-    (driver.route || []).forEach((s, i) => {
+    const orderedStops = driver.route || [];
+    orderedStops.forEach((s, i) => {
 
         const lat = parseFloat(s.lat);
         const lng = parseFloat(s.lng);
 
-        if (!lat || !lng) return;
+        if (isNaN(lat) || isNaN(lng)) return;
 
         const point = [lat, lng];
 
@@ -166,64 +169,47 @@ data.forEach((driver, idx) => {
         m.bindPopup(`
             <b>${s.tracking_number || ""}</b><br>
             ${s.recipient_name || ""}<br>
-            ${s.address || ""}
+            ${s.address || ""}<br>
+            <b>ETA:</b> ${s.eta || "--:--"}
         `);
 
         markers.push(m);
     });
 
-    groups.push(markers);
 
-    // --- route line ---
-    let line;
+    const lineCoords = [
+        [-20.19638, 57.48478],
+        ...coords,
+        [-20.19638, 57.48478]
+    ];
 
-    if (driver.polyline && window.polyline) {
-
-        try {
-            const decoded = window.polyline.decode(driver.polyline);
-
-            const path = decoded.map(p => [p[0], p[1]]);
-
-            line = L.polyline(path, {
-                color,
-                weight: 5,
-                opacity: 0.8
-            }).addTo(map);
-
-        } catch (e) {
-            console.log("route decode failed", e);
-        }
-
-    } else if (coords.length > 1) {
-
-        line = L.polyline(coords, {
-            color,
-            weight: 5,
-            opacity: 0.6,
-            dashArray: "6,6"
-        }).addTo(map);
-    }
+    const line = L.polyline(lineCoords, {
+        color,
+        weight: 5,
+        opacity: 0.75
+    }).addTo(map);
 
     lines.push(line);
+    groups.push(markers);
 
 });
 
-// render sidebar
+
 document.getElementById("driverList").innerHTML = ui;
 
-// fit map once
+
 if (all.length) {
     map.fitBounds(all, { padding: [40, 40] });
 }
 
-// toggle stops- to see and unsee the stops 
+
 function toggleStops(e, i) {
     e.stopPropagation();
     const el = document.getElementById(`stops-${i}`);
     if (el) el.classList.toggle("hidden");
 }
 
-// focus driver function  
+
 function focusDriver(i) {
 
     lines.forEach((l, idx) => {
