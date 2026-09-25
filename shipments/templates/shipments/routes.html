@@ -44,11 +44,8 @@ window.addEventListener("load", () => {
     setTimeout(() => map.invalidateSize(true), 500);
 });
 
-L.tileLayer("https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=YOUR_MAPTILER_KEY", {
-    attribution: '&copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    tileSize: 512,
-    zoomOffset: -1,
-    maxZoom: 20
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap"
 }).addTo(map);
 
 const palette = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6"];
